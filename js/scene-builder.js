@@ -14,7 +14,20 @@
    */
   function buildModel(item, assetId, assets) {
     const hasSrc = item.src && item.src.trim() !== '';
-    let entity;
+
+    // Wrapper-entitet håller position, skala och animation
+    const wrap = document.createElement('a-entity');
+    wrap.setAttribute('position', item.position || '0 0.5 0');
+    wrap.setAttribute('scale', item.scale || '0.5 0.5 0.5');
+    if (item.rotation) wrap.setAttribute('rotation', item.rotation);
+    wrap.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 8000; easing: linear');
+
+    // Platshållarkub – visas alltid tills riktigt modell laddas klart
+    const box = document.createElement('a-box');
+    box.setAttribute('color', '#4a90d9');
+    box.setAttribute('opacity', '0.85');
+    box.setAttribute('metalness', '0.2');
+    wrap.appendChild(box);
 
     if (hasSrc) {
       const assetItem = document.createElement('a-asset-item');
@@ -22,25 +35,20 @@
       assetItem.setAttribute('src', item.src);
       assets.appendChild(assetItem);
 
-      entity = document.createElement('a-gltf-model');
-      entity.setAttribute('src', '#' + assetId);
-    } else {
-      // Platshållarkub
-      entity = document.createElement('a-box');
-      entity.setAttribute('color', '#4a90d9');
-      entity.setAttribute('opacity', '0.85');
-      entity.setAttribute('metalness', '0.3');
-      entity.setAttribute('roughness', '0.5');
+      const model = document.createElement('a-gltf-model');
+      model.setAttribute('src', '#' + assetId);
+      model.setAttribute('visible', 'false');
+
+      // Dölj platshållaren och visa modellen när den laddats
+      model.addEventListener('model-loaded', function () {
+        box.setAttribute('visible', 'false');
+        model.setAttribute('visible', 'true');
+      });
+
+      wrap.appendChild(model);
     }
 
-    entity.setAttribute('position', item.position || '0 0.05 0');
-    entity.setAttribute('scale', item.scale || '0.3 0.3 0.3');
-    if (item.rotation) entity.setAttribute('rotation', item.rotation);
-
-    // Lägg till roteringsanimation
-    entity.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 8000; easing: linear');
-
-    return entity;
+    return wrap;
   }
 
   /**
@@ -158,9 +166,9 @@
       marker.setAttribute('id', station.id);
       // Mjuknar ut rörelsejitter vid detektering
       marker.setAttribute('smooth', 'true');
-      marker.setAttribute('smoothCount', '5');
+      marker.setAttribute('smoothCount', '10');
       marker.setAttribute('smoothTolerance', '0.01');
-      marker.setAttribute('smoothThreshold', '2');
+      marker.setAttribute('smoothThreshold', '5');
 
       // Bygg innehållsentiteter
       station.content.forEach(function (item, idx) {
