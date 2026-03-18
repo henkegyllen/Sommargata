@@ -145,7 +145,9 @@
       // Skapa markörselement
       const marker = document.createElement('a-marker');
 
-      if (station.marker.type === 'barcode') {
+      if (station.marker.type === 'preset') {
+        marker.setAttribute('preset', station.marker.preset);
+      } else if (station.marker.type === 'barcode') {
         marker.setAttribute('type', 'barcode');
         marker.setAttribute('value', String(station.marker.value));
       } else if (station.marker.type === 'pattern') {

@@ -11,7 +11,7 @@
     {
       "id": "station1",
       "name": "Kommunhuset",
-      "marker": { "type": "barcode", "value": 0 },
+      "marker": { "type": "preset", "preset": "hiro" },
       "content": [
         {
           "type": "model",
@@ -31,7 +31,7 @@
     {
       "id": "station2",
       "name": "Historiskt foto",
-      "marker": { "type": "barcode", "value": 1 },
+      "marker": { "type": "preset", "preset": "kanji" },
       "content": [
         {
           "type": "photo",
