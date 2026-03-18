@@ -1,0 +1,103 @@
+{
+  "event": {
+    "name": "Sommargatan 2026",
+    "municipality": "Växjö Kommun",
+    "instructionsText": "Peka kameran mot markörbilden vid stationen.",
+    "noMarkerText": "Peka kameran mot markörbilden på skylten...",
+    "cameraErrorText": "Kameraåtkomst krävs. Tillåt kamera i webbläsarens inställningar.",
+    "unsupportedText": "Din webbläsare stöder inte AR. Prova Chrome (Android) eller Safari (iOS)."
+  },
+  "stations": [
+    {
+      "id": "station1",
+      "name": "Kommunhuset",
+      "marker": { "type": "barcode", "value": 0 },
+      "content": [
+        {
+          "type": "model",
+          "src": "assets/models/kommunhuset.glb",
+          "position": "0 0.05 0",
+          "rotation": "0 0 0",
+          "scale": "0.3 0.3 0.3"
+        },
+        {
+          "type": "infoPanel",
+          "title": "Kommunhuset",
+          "body": "Växjös kommunhus är centrum för stadens förvaltning. Ersätt med er text.",
+          "position": "0 0.22 0"
+        }
+      ]
+    },
+    {
+      "id": "station2",
+      "name": "Historiskt foto",
+      "marker": { "type": "barcode", "value": 1 },
+      "content": [
+        {
+          "type": "photo",
+          "src": "assets/images/historiskt-foto.jpg",
+          "position": "0 0.1 0",
+          "scale": "0.2 0.15 1",
+          "label": "Stationsområdet år 1920"
+        },
+        {
+          "type": "infoPanel",
+          "title": "Stationen förr och nu",
+          "body": "Ersätt med en historisk beskrivning av platsen.",
+          "position": "0 0.24 0"
+        }
+      ]
+    },
+    {
+      "id": "station3",
+      "name": "Parkområdet",
+      "marker": { "type": "barcode", "value": 2 },
+      "content": [
+        {
+          "type": "infoPanel",
+          "title": "Parkområdet",
+          "body": "Information om detta parkområde. Redigera texten i config.json.",
+          "position": "0 0.1 0"
+        }
+      ]
+    },
+    {
+      "id": "station4",
+      "name": "Skulpturen",
+      "marker": { "type": "barcode", "value": 3 },
+      "content": [
+        {
+          "type": "model",
+          "src": "assets/models/skulptur.glb",
+          "position": "0 0.05 0",
+          "scale": "0.4 0.4 0.4"
+        },
+        {
+          "type": "photo",
+          "src": "assets/images/skulptur-historisk.jpg",
+          "position": "0.28 0.1 0",
+          "scale": "0.16 0.12 1"
+        }
+      ]
+    },
+    {
+      "id": "station5",
+      "name": "Torget",
+      "marker": { "type": "barcode", "value": 4 },
+      "content": [
+        {
+          "type": "infoPanel",
+          "title": "Torget",
+          "body": "Torget har varit Växjös samlingspunkt sedan medeltiden.",
+          "position": "0 0.22 0"
+        },
+        {
+          "type": "photo",
+          "src": "assets/images/torget-gammalt.jpg",
+          "position": "0 0.1 0",
+          "scale": "0.22 0.14 1"
+        }
+      ]
+    }
+  ]
+}

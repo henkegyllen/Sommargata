@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <title>Sommargatan AR – Växjö Kommun</title>
+  <link rel="stylesheet" href="css/ui.css">
+</head>
+<body>
+  <main class="landing">
+    <h1>Sommargatan 2026</h1>
+    <p class="municipality">Växjö Kommun</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-number">1</div>
+        <div class="step-text">
+          <h3>Skanna QR-koden</h3>
+          <p>Skanna QR-koden vid stationen med mobilkameran eller en QR-läsare.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-number">2</div>
+        <div class="step-text">
+          <h3>Tillåt kameraåtkomst</h3>
+          <p>Tryck "Tillåt" när webbläsaren frågar om kameraåtkomst.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-number">3</div>
+        <div class="step-text">
+          <h3>Peka mot markören</h3>
+          <p>Rikta kameran mot markörbilden på skylten – innehållet dyker upp!</p>
+        </div>
+      </div>
+    </div>
+
+    <a href="ar.html" class="start-btn" id="start-btn">Starta AR</a>
+
+    <p class="browser-note">
+      Fungerar i Safari (iPhone/iPad) och Chrome (Android).<br>
+      Kräver iOS 16.4 eller senare.
+    </p>
+
+    <div class="unsupported-msg hidden" id="unsupported-msg">
+      Din webbläsare stöder tyvärr inte AR.<br>
+      Prova Chrome på Android eller Safari på iPhone.
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      var supported = !!(
+        navigator.mediaDevices &&
+        typeof navigator.mediaDevices.getUserMedia === 'function' &&
+        window.WebGLRenderingContext
+      );
+      if (!supported) {
+        document.getElementById('start-btn').classList.add('hidden');
+        document.getElementById('unsupported-msg').classList.remove('hidden');
+      }
+    })();
+  </script>
+</body>
+</html>

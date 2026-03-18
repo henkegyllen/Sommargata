@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Sommargatan AR</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.5/aframe/build/aframe-ar.js"></script>
+  <link rel="stylesheet" href="css/ui.css">
+  <style>
+    html, body { margin: 0; overflow: hidden; background: #000; }
+  </style>
+</head>
+<body>
+
+  <!-- UI-lager ovanpå AR-kameravyn -->
+  <div id="ui-overlay">
+    <div id="status-bar">
+      <span id="status-text">Laddar innehåll...</span>
+    </div>
+    <div id="station-info" class="hidden">
+      <h2 id="station-name"></h2>
+    </div>
+    <a href="index.html" id="back-btn">&#8592; Tillbaka</a>
+  </div>
+
+  <!-- Visas om ingen markör hittas efter 15 sekunder -->
+  <div id="nudge-overlay" class="hidden">
+    Håll markörbilden helt synlig i kameravyn i bra ljusförhållanden.
+    <br><br>
+    <button onclick="document.getElementById('nudge-overlay').classList.add('hidden')"
+            style="background:#4a90d9;color:#fff;border:none;padding:8px 18px;border-radius:6px;font-size:14px;cursor:pointer;">
+      OK
+    </button>
+  </div>
+
+  <!-- Visas vid kritiska fel -->
+  <div id="error-overlay" class="hidden">
+    <h2>Något gick fel</h2>
+    <p id="error-message"></p>
+    <a href="index.html">&#8592; Gå tillbaka</a>
+  </div>
+
+  <!-- AR-scen: A-Frame + AR.js -->
+  <a-scene
+    id="ar-scene"
+    embedded
+    arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+    renderer="logarithmicDepthBuffer: true; antialias: true; alpha: true;"
+    vr-mode-ui="enabled: false"
+    loading-screen="dotsColor: white; backgroundColor: #1a1a2e">
+
+    <a-assets id="asset-manager" timeout="15000">
+      <!-- Tillgångar (modeller, bilder) injiceras hit dynamiskt av scene-builder.js -->
+    </a-assets>
+
+    <!-- Markörer injiceras hit dynamiskt av scene-builder.js -->
+
+    <a-entity camera></a-entity>
+  </a-scene>
+
+  <!-- Ladda skript i rätt ordning: ui → marker → scene → config (config triggar kedjan) -->
+  <script src="js/ui-controller.js"></script>
+  <script src="js/marker-manager.js"></script>
+  <script src="js/scene-builder.js"></script>
+  <script src="js/config-loader.js"></script>
+
+</body>
+</html>
