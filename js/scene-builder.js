@@ -14,20 +14,16 @@
    */
   function buildModel(item, assetId, assets) {
     const hasSrc = item.src && item.src.trim() !== '';
+    const pos   = item.position || '0 0.5 0';
+    const scale = item.scale    || '0.8 0.8 0.8';
 
-    // Wrapper-entitet håller position, skala och animation
-    const wrap = document.createElement('a-entity');
-    wrap.setAttribute('position', item.position || '0 0.5 0');
-    wrap.setAttribute('scale', item.scale || '0.5 0.5 0.5');
-    if (item.rotation) wrap.setAttribute('rotation', item.rotation);
-    wrap.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 8000; easing: linear');
-
-    // Platshållarkub – visas alltid tills riktigt modell laddas klart
+    // Platshållarkub – direkt element, ingen wrapper
     const box = document.createElement('a-box');
     box.setAttribute('color', '#4a90d9');
-    box.setAttribute('opacity', '0.85');
-    box.setAttribute('metalness', '0.2');
-    wrap.appendChild(box);
+    box.setAttribute('opacity', '0.9');
+    box.setAttribute('position', pos);
+    box.setAttribute('scale', scale);
+    box.setAttribute('animation', 'property: rotation; from: 0 0 0; to: 0 360 0; loop: true; dur: 6000; easing: linear');
 
     if (hasSrc) {
       const assetItem = document.createElement('a-asset-item');
@@ -37,18 +33,25 @@
 
       const model = document.createElement('a-gltf-model');
       model.setAttribute('src', '#' + assetId);
+      model.setAttribute('position', pos);
+      model.setAttribute('scale', scale);
       model.setAttribute('visible', 'false');
+      model.setAttribute('animation', 'property: rotation; from: 0 0 0; to: 0 360 0; loop: true; dur: 6000; easing: linear');
 
-      // Dölj platshållaren och visa modellen när den laddats
+      // Byt platshållarkub mot riktig modell när den laddats
       model.addEventListener('model-loaded', function () {
         box.setAttribute('visible', 'false');
         model.setAttribute('visible', 'true');
       });
 
-      wrap.appendChild(model);
+      // Returnera båda i en entitet utan skala/position (undvik nästlad transform)
+      const pair = document.createElement('a-entity');
+      pair.appendChild(box);
+      pair.appendChild(model);
+      return pair;
     }
 
-    return wrap;
+    return box;
   }
 
   /**
@@ -108,8 +111,8 @@
     const bg = document.createElement('a-plane');
     bg.setAttribute('color', '#1a1a2e');
     bg.setAttribute('opacity', '0.9');
-    bg.setAttribute('width', '0.5');
-    bg.setAttribute('height', '0.2');
+    bg.setAttribute('width', '1.2');
+    bg.setAttribute('height', '0.5');
     bg.setAttribute('side', 'double');
     wrap.appendChild(bg);
 
@@ -119,9 +122,9 @@
       t.setAttribute('value', item.title);
       t.setAttribute('align', 'center');
       t.setAttribute('color', '#ffffff');
-      t.setAttribute('position', '0 0.065 0.001');
-      t.setAttribute('width', '0.45');
-      t.setAttribute('wrap-count', '22');
+      t.setAttribute('position', '0 0.15 0.001');
+      t.setAttribute('width', '1.1');
+      t.setAttribute('wrap-count', '20');
       wrap.appendChild(t);
     }
 
@@ -131,9 +134,9 @@
       b.setAttribute('value', item.body);
       b.setAttribute('align', 'center');
       b.setAttribute('color', '#ccccdd');
-      b.setAttribute('position', '0 -0.012 0.001');
-      b.setAttribute('width', '0.43');
-      b.setAttribute('wrap-count', '40');
+      b.setAttribute('position', '0 -0.02 0.001');
+      b.setAttribute('width', '1.0');
+      b.setAttribute('wrap-count', '30');
       wrap.appendChild(b);
     }
 
