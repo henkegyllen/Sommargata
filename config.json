@@ -2,7 +2,7 @@
   "event": {
     "name": "Sommargatan 2026",
     "municipality": "Växjö Kommun",
-    "instructionsText": "Peka kameran mot markörbilden vid stationen.",
+    "instructionsText": "Placera markören på marken och peka kameran rakt nedåt mot den.",
     "noMarkerText": "Peka kameran mot markörbilden på skylten...",
     "cameraErrorText": "Kameraåtkomst krävs. Tillåt kamera i webbläsarens inställningar.",
     "unsupportedText": "Din webbläsare stöder inte AR. Prova Chrome (Android) eller Safari (iOS)."
@@ -16,8 +16,9 @@
         {
           "type": "model",
           "src": "assets/models/kommunhuset.glb",
-          "position": "0 0.5 0",
-          "scale": "0.8 0.8 0.8"
+          "position": "0 0.02 0",
+          "rotation": "-90 0 0",
+          "scale": "0.005 0.005 0.005"
         },
         {
           "type": "infoPanel",

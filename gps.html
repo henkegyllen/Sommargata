@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Sommargatan GPS AR</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.5/aframe/build/aframe-ar.js"></script>
+  <link rel="stylesheet" href="css/ui.css">
+  <style>
+    html, body { margin: 0; overflow: hidden; background: transparent; }
+  </style>
+</head>
+<body>
+
+  <!-- UI-lager -->
+  <div id="ui-overlay">
+    <div id="status-bar">
+      <span id="status-text">Söker GPS-position...</span>
+    </div>
+    <a href="index.html" id="back-btn">&#8592; Tillbaka</a>
+  </div>
+
+  <!-- Fel-överlägget -->
+  <div id="error-overlay" class="hidden">
+    <h2>Något gick fel</h2>
+    <p id="error-message"></p>
+    <a href="index.html">&#8592; Gå tillbaka</a>
+  </div>
+
+  <!-- GPS AR-scen -->
+  <a-scene
+    arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;"
+    renderer="antialias: true; alpha: true;"
+    vr-mode-ui="enabled: false"
+    loading-screen="enabled: false">
+
+    <a-assets timeout="15000">
+      <a-asset-item id="cake-model" src="assets/models/cake.glb"></a-asset-item>
+    </a-assets>
+
+    <a-gltf-model
+      src="#cake-model"
+      rotation="0 0 0"
+      scale="3 3 3"
+      animation="property: rotation; from: 0 0 0; to: 0 360 0; loop: true; dur: 8000; easing: linear"
+      gps-entity-place="latitude: 56.87712; longitude: 14.80690;">
+    </a-gltf-model>
+
+    <a-camera gps-camera rotation-reader></a-camera>
+  </a-scene>
+
+  <script>
+    (function () {
+      var statusEl = document.getElementById('status-text');
+
+      if (!navigator.geolocation) {
+        document.getElementById('error-message').textContent =
+          'Din enhet saknar GPS-stöd.';
+        document.getElementById('error-overlay').classList.remove('hidden');
+        return;
+      }
+
+      navigator.geolocation.watchPosition(
+        function (pos) {
+          var acc = Math.round(pos.coords.accuracy);
+          statusEl.textContent = 'GPS aktiv ±' + acc + ' m – rikta kameran mot platsen';
+        },
+        function () {
+          document.getElementById('error-message').textContent =
+            'GPS-åtkomst nekades. Tillåt platsdelning i webbläsarens inställningar.';
+          document.getElementById('error-overlay').classList.remove('hidden');
+        },
+        { enableHighAccuracy: true }
+      );
+    })();
+  </script>
+
+</body>
+</html>

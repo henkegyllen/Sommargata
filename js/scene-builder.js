@@ -23,6 +23,7 @@
     box.setAttribute('opacity', '0.9');
     box.setAttribute('position', pos);
     box.setAttribute('scale', scale);
+    if (item.rotation) box.setAttribute('rotation', item.rotation);
     box.setAttribute('animation', 'property: rotation; from: 0 0 0; to: 0 360 0; loop: true; dur: 6000; easing: linear');
 
     if (hasSrc) {
@@ -35,6 +36,7 @@
       model.setAttribute('src', '#' + assetId);
       model.setAttribute('position', pos);
       model.setAttribute('scale', scale);
+      if (item.rotation) model.setAttribute('rotation', item.rotation);
       model.setAttribute('visible', 'false');
       model.setAttribute('animation', 'property: rotation; from: 0 0 0; to: 0 360 0; loop: true; dur: 6000; easing: linear');
 
