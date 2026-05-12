@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="css/ui.css">
   <style>
     html, body { margin: 0; overflow: hidden; background: transparent; }
+    canvas.a-canvas { background: transparent !important; }
   </style>
 </head>
 <body>
@@ -33,6 +34,7 @@
   <a-scene
     arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;"
     renderer="antialias: true; alpha: true;"
+    embedded
     vr-mode-ui="enabled: false"
     loading-screen="enabled: false">
 
@@ -44,7 +46,6 @@
       src="#cake-model"
       rotation="0 0 0"
       scale="3 3 3"
-      animation="property: rotation; from: 0 0 0; to: 0 360 0; loop: true; dur: 8000; easing: linear"
       gps-entity-place="latitude: 56.87712; longitude: 14.80690;">
     </a-gltf-model>
 
