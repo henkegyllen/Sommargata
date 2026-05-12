@@ -32,7 +32,7 @@
   <!-- GPS AR-scen -->
   <a-scene
     arjs="sourceType: webcam; videoTexture: false; debugUIEnabled: false;"
-    renderer="antialias: true; alpha: true; logarithmicDepthBuffer: true;"
+    renderer="antialias: true; alpha: true;"
     vr-mode-ui="enabled: false"
     loading-screen="enabled: false">
 
@@ -51,14 +51,6 @@
   </a-scene>
 
   <script>
-    // Sätt RoomEnvironment så att PBR-material (glasyren) får reflektioner
-    // trots att scenbakgrunden är transparent (kameraflöde visas istället).
-    document.querySelector('a-scene').addEventListener('loaded', function () {
-      var pmrem = new THREE.PMREMGenerator(this.renderer);
-      this.object3D.environment = pmrem.fromScene(new THREE.RoomEnvironment()).texture;
-      pmrem.dispose();
-    });
-
     (function () {
       var statusEl = document.getElementById('status-text');
 
