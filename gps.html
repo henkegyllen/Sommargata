@@ -40,10 +40,19 @@
       <a-asset-item id="cake-model" src="assets/models/cake.glb"></a-asset-item>
     </a-assets>
 
+    <!-- Debugmarkör: röd sfär syns alltid om GPS fungerar, kräver ingen modell -->
+    <a-sphere
+      color="#ff2200"
+      radius="1.5"
+      position="0 1.5 0"
+      gps-projected-entity-place="latitude: 56.87712; longitude: 14.80690;">
+    </a-sphere>
+
     <a-gltf-model
       src="#cake-model"
       rotation="0 0 0"
-      scale="3 3 3"
+      scale="8 8 8"
+      position="0 0 0"
       gps-projected-entity-place="latitude: 56.87712; longitude: 14.80690;">
     </a-gltf-model>
 
