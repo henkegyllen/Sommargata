@@ -1,13 +1,14 @@
 # Sommargatan Survey AR – objektplacering
-# Kolumner: namn, lat (DD), lon (DD), elev (m ö.h., valfri), synlig_inom (m, valfri)
 #
-# ANKAR      – ArUco-markörens inmätta position, origo i AR-scenen (en rad, obligatorisk)
-# <fil>.glb  – 3D-objekt ur assets/models/. synlig_inom = max avstånd för synlighet (m).
-# SPARR_<n>_A
-# SPARR_<n>_B – Två inmätta punkter bildar en siktbarriär. Döljer objekt vars siktlinje
-#               observer→objekt skär barriärlinjen. Alla barriärer gäller alla objekt.
-#               Kräver exakt ett A- och ett B-par per barriärnamn.
-namn,lat,lon,elev,synlig_inom
-ANKAR,56.87712,14.80690,105.00,
-cake.glb,56.87712,14.80690,105.42,30
-cake.glb,56.03177,14.16395,105.00,
+# Objekt/ankar: namn, lat, lon, elev (valfri), synlig_inom (m, valfri), scale (valfri)
+# Barriär:      SPARR_namn, lat_start, lon_start, lat_slut, lon_slut
+#
+# ANKAR         – ArUco-markörens inmätta position, origo i AR-scenen (obligatorisk)
+# <fil>.glb     – 3D-objekt ur assets/models/
+#   synlig_inom – max avstånd för synlighet i meter (tom = alltid synlig)
+#   scale       – skalfaktor: "4" = uniform, "4 2 4" = icke-uniform (tom = 1)
+# SPARR_<namn>  – Siktbarriär. Objekt döljs om siktlinjen observer→objekt skär linjen.
+#
+namn,lat,lon,elev,synlig_inom,scale
+ANKAR,56.87712,14.80690,105.00,,
+cake.glb,56.87712,14.80690,105.42,30,4
