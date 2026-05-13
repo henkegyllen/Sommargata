@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>Sommargatan Survey AR v006</title>
+  <title>Sommargatan Survey AR v007</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <link rel="stylesheet" href="css/ui.css">
   <style>
@@ -34,9 +34,9 @@
       border-radius: 8px;
       min-width: 260px;
     }
-    .status-row.ready    { color: #6dffb0; }
-    .status-row.warn     { color: #ffdd57; }
-    .status-row.error    { color: #ff6b6b; }
+    .status-row.ready  { color: #6dffb0; }
+    .status-row.warn   { color: #ffdd57; }
+    .status-row.error  { color: #ff6b6b; }
 
     #start-ar-btn {
       padding: 14px 36px;
@@ -99,7 +99,7 @@
       font-family: sans-serif;
     }
     #error-overlay h2 { color: #ff6b6b; margin: 0; }
-    #error-overlay a { color: #aaa; }
+    #error-overlay a  { color: #aaa; }
     .hidden { display: none !important; }
   </style>
 </head>
@@ -144,16 +144,19 @@
     /* ─────────────────────────────────────────
        Konfiguration
     ───────────────────────────────────────── */
-    var MAX_GPS_ACC = 15; // m — acceptera GPS-mätningar upp till ±15 m
+    var MAX_GPS_ACC       = 15;   // m — acceptera GPS-mätningar upp till ±15 m
+    var VISIBILITY_HZ     = 100;  // ms mellan synlighetskontroller under AR
 
     /* ─────────────────────────────────────────
        Tillstånd
     ───────────────────────────────────────── */
-    var anchor        = null;   // ANKAR-raden från CSV
-    var placedObjects = [];     // övriga rader med beräknade offsets
-    var modelDefaults = {};     // från config.json
+    var anchor        = null;  // ANKAR-raden
+    var placedObjects = [];    // GLB-objekt med offset + synlighetsregler
+    var barriers      = [];    // siktbarriärer [{ ax, az, bx, bz }]
+    var modelDefaults = {};
     var lastGoodPos   = null;
     var lastAcc       = null;
+    var visTimer      = null;
 
     /* ─────────────────────────────────────────
        DOM-refs
@@ -172,33 +175,48 @@
 
     /* ─────────────────────────────────────────
        CSV-parser
-       Stödjer header-rad (namn/name), kommentarer (#)
-       och valfri elev-kolumn.
+       Stödjer: header-rad, kommentarsrader (#),
+       valfria kolumner elev + synlig_inom.
+       Identifierar ANKAR och SPARR_*_A/B automatiskt.
     ───────────────────────────────────────── */
     function parseCSV(text) {
-      var rows = [];
+      var objectRows = [];
+      var sparrRows  = [];
+
       text.trim().split(/\r?\n/).forEach(function (line) {
         line = line.trim();
         if (!line || line.charAt(0) === '#') return;
-        var c = line.split(',').map(function (s) { return s.trim(); });
-        if (c[0].toLowerCase() === 'namn' || c[0].toLowerCase() === 'name') return;
+        var c   = line.split(',').map(function (s) { return s.trim(); });
+        var nam = c[0];
+        if (nam.toLowerCase() === 'namn' || nam.toLowerCase() === 'name') return;
+
         var lat = parseFloat(c[1]);
         var lon = parseFloat(c[2]);
         if (isNaN(lat) || isNaN(lon)) return;
-        rows.push({
-          namn: c[0],
-          lat:  lat,
-          lon:  lon,
-          elev: (c[3] !== undefined && c[3] !== '') ? parseFloat(c[3]) : null,
-          modelLoaded: false,
-          arActive:    false
-        });
+
+        var row = {
+          namn:        nam,
+          lat:         lat,
+          lon:         lon,
+          elev:        (c[3] !== undefined && c[3] !== '') ? parseFloat(c[3]) : null,
+          synligInom:  (c[4] !== undefined && c[4] !== '') ? parseFloat(c[4]) : null
+        };
+
+        var sparrMatch = nam.match(/^SPARR_(.+)_(A|B)$/i);
+        if (sparrMatch) {
+          row.sparrGroup    = sparrMatch[1];
+          row.sparrEndpoint = sparrMatch[2].toUpperCase();
+          sparrRows.push(row);
+        } else {
+          objectRows.push(row);
+        }
       });
-      return rows;
+
+      return { objectRows: objectRows, sparrRows: sparrRows };
     }
 
     /* ─────────────────────────────────────────
-       Geodetisk offset: ankar → objekt (meter)
+       Geodetisk offset ankar → punkt (meter)
        +X = öst, +Y = upp, -Z = norr (A-Frame)
     ───────────────────────────────────────── */
     function surveyOffset(anc, obj) {
@@ -214,7 +232,7 @@
     }
 
     /* ─────────────────────────────────────────
-       Avstånd från given lat/lon till ankaret
+       Avstånd (horisontellt) från lat/lon till ankaret
     ───────────────────────────────────────── */
     function distToAnchor(lat, lon) {
       if (!anchor) return null;
@@ -223,24 +241,56 @@
     }
 
     /* ─────────────────────────────────────────
-       Skalstring för en modell (från config)
+       Bygg barriärlista från SPARR-rader
     ───────────────────────────────────────── */
-    function getScale(filename) {
-      return (modelDefaults[filename] && modelDefaults[filename].scale)
-        ? modelDefaults[filename].scale
-        : '1 1 1';
+    function buildBarriers(sparrRows) {
+      var groups = {};
+      sparrRows.forEach(function (row) {
+        var off = surveyOffset(anchor, row);
+        if (!groups[row.sparrGroup]) groups[row.sparrGroup] = {};
+        groups[row.sparrGroup][row.sparrEndpoint] = { x: off.x, z: off.z };
+      });
+      var result = [];
+      Object.keys(groups).forEach(function (name) {
+        var g = groups[name];
+        if (g.A && g.B) {
+          result.push({ ax: g.A.x, az: g.A.z, bx: g.B.x, bz: g.B.z });
+        } else {
+          console.warn('SPARR_' + name + ' saknar ett A- eller B-par, ignoreras.');
+        }
+      });
+      return result;
     }
 
     /* ─────────────────────────────────────────
-       Hjälpfunktion: position-sträng
+       2D linjeskärningstest (horisontellt plan)
+       Returnerar true om segment P1→P2 skär P3→P4
     ───────────────────────────────────────── */
+    function segmentsIntersect(p1x, p1z, p2x, p2z, p3x, p3z, p4x, p4z) {
+      var d1x = p2x - p1x, d1z = p2z - p1z;
+      var d2x = p4x - p3x, d2z = p4z - p3z;
+      var cross = d1x * d2z - d1z * d2x;
+      if (Math.abs(cross) < 1e-10) return false; // parallella
+      var dx = p3x - p1x, dz = p3z - p1z;
+      var t = (dx * d2z - dz * d2x) / cross;
+      var u = (dx * d1z - dz * d1x) / cross;
+      return t > 0 && t < 1 && u > 0 && u < 1;
+    }
+
+    /* ─────────────────────────────────────────
+       Skalstring för en modell
+    ───────────────────────────────────────── */
+    function getScale(filename) {
+      return (modelDefaults[filename] && modelDefaults[filename].scale)
+        ? modelDefaults[filename].scale : '1 1 1';
+    }
+
     function posStr(x, y, z) {
       return x.toFixed(3) + ' ' + y.toFixed(3) + ' ' + z.toFixed(3);
     }
 
     /* ─────────────────────────────────────────
-       Bygg A-Frame-entiteter för alla objekt
-       (osynliga tills AR-sessionen startar)
+       Bygg A-Frame-entiteter (osynliga till AR startar)
     ───────────────────────────────────────── */
     function buildScene() {
       placedObjects.forEach(function (obj, idx) {
@@ -248,13 +298,12 @@
         var assetId  = 'survey-asset-' + idx;
         var scaleStr = getScale(obj.namn);
 
-        // Asset-post
         var assetItem = document.createElement('a-asset-item');
         assetItem.setAttribute('id',  assetId);
         assetItem.setAttribute('src', 'assets/models/' + obj.namn);
         assets.appendChild(assetItem);
 
-        // Platshållarkub (visas om GLB inte laddat ännu när AR startar)
+        // Platshållarkub
         var box = document.createElement('a-box');
         box.setAttribute('id',       'box-' + idx);
         box.setAttribute('color',    '#4a90d9');
@@ -273,28 +322,76 @@
 
         model.addEventListener('model-loaded', function () {
           obj.modelLoaded = true;
-          if (obj.arActive) {
-            document.getElementById('box-' + idx).setAttribute('visible', 'false');
+          // Om AR redan kör och objektet är synligt – visa modell, dölj box
+          if (obj.arActive && obj.currentlyVisible) {
+            box.setAttribute('visible',   'false');
             model.setAttribute('visible', 'true');
           }
         });
 
         scene.appendChild(model);
+
+        obj.modelLoaded      = false;
+        obj.arActive         = false;
+        obj.currentlyVisible = false;
       });
     }
 
     /* ─────────────────────────────────────────
-       Gör alla objekt synliga när AR startar
+       Synlighetskontroll – körs var VISIBILITY_HZ ms
     ───────────────────────────────────────── */
-    function showObjects() {
+    function updateVisibility() {
+      var threeCamera = scene.camera;
+      if (!threeCamera) return;
+
+      var camPos = new THREE.Vector3();
+      threeCamera.getWorldPosition(camPos);
+
       placedObjects.forEach(function (obj, idx) {
-        obj.arActive = true;
-        if (obj.modelLoaded) {
-          document.getElementById('model-' + idx).setAttribute('visible', 'true');
-        } else {
-          document.getElementById('box-' + idx).setAttribute('visible', 'true');
-        }
+        var shouldShow = checkVisible(camPos, obj);
+        if (shouldShow === obj.currentlyVisible) return; // ingen förändring
+        obj.currentlyVisible = shouldShow;
+        applyVisibility(idx, obj, shouldShow);
       });
+    }
+
+    function checkVisible(camPos, obj) {
+      var off = obj.offset;
+
+      // 1. Distansgräns
+      if (obj.synligInom !== null) {
+        var dx   = camPos.x - off.x;
+        var dz   = camPos.z - off.z;
+        var dist = Math.sqrt(dx * dx + dz * dz);
+        if (dist > obj.synligInom) return false;
+      }
+
+      // 2. Siktbarriärer
+      for (var i = 0; i < barriers.length; i++) {
+        var b = barriers[i];
+        if (segmentsIntersect(
+          camPos.x, camPos.z, off.x, off.z,
+          b.ax, b.az, b.bx, b.bz
+        )) return false;
+      }
+
+      return true;
+    }
+
+    function applyVisibility(idx, obj, show) {
+      var model = document.getElementById('model-' + idx);
+      var box   = document.getElementById('box-'   + idx);
+      if (show) {
+        if (obj.modelLoaded) {
+          model.setAttribute('visible', 'true');
+          box.setAttribute('visible',   'false');
+        } else {
+          box.setAttribute('visible',   'true');
+        }
+      } else {
+        model.setAttribute('visible', 'false');
+        box.setAttribute('visible',   'false');
+      }
     }
 
     /* ─────────────────────────────────────────
@@ -315,23 +412,28 @@
 
       modelDefaults = config.modelDefaults || {};
 
-      var rows = parseCSV(csvText);
-      anchor = rows.find(function (r) { return r.namn.toUpperCase() === 'ANKAR'; });
+      var parsed = parseCSV(csvText);
+      anchor = parsed.objectRows.find(function (r) {
+        return r.namn.toUpperCase() === 'ANKAR';
+      });
 
       if (!anchor) {
         showError('Ingen ANKAR-rad hittades i placements.csv.');
         return;
       }
 
-      placedObjects = rows
+      placedObjects = parsed.objectRows
         .filter(function (r) { return r.namn.toUpperCase() !== 'ANKAR'; })
         .map(function (r) {
           r.offset = surveyOffset(anchor, r);
           return r;
         });
 
-      var n = placedObjects.length;
-      loadStatus.textContent = n + ' objekt laddade ✓';
+      barriers = buildBarriers(parsed.sparrRows);
+
+      var info = placedObjects.length + ' objekt';
+      if (barriers.length > 0) info += ', ' + barriers.length + ' barriär' + (barriers.length > 1 ? 'er' : '');
+      loadStatus.textContent = info + ' laddade ✓';
       loadStatus.className   = 'status-row ready';
 
       buildScene();
@@ -382,12 +484,11 @@
             gpsStatus.className   = 'status-row warn';
           }
 
-          // Avstånd till ankaret
           if (anchor) {
             var d = distToAnchor(pos.coords.latitude, pos.coords.longitude);
             anchorDist.classList.remove('hidden');
-            anchorDist.textContent  = 'Avstånd till ankare: ' + Math.round(d) + ' m';
-            anchorDist.className    = 'status-row ' +
+            anchorDist.textContent = 'Avstånd till ankare: ' + Math.round(d) + ' m';
+            anchorDist.className   = 'status-row ' +
               (d < 10 ? 'ready' : d < 50 ? 'warn' : 'error');
           }
         },
@@ -416,11 +517,15 @@
     scene.addEventListener('enter-vr', function () {
       startScreen.style.display = 'none';
       uiOverlay.classList.remove('hidden');
-      showObjects();
       if (lastAcc !== null) accLabel.textContent = 'GPS ±' + lastAcc + ' m';
+
+      // Markera alla objekt som AR-aktiva och starta synlighetsslingan
+      placedObjects.forEach(function (obj) { obj.arActive = true; });
+      visTimer = setInterval(updateVisibility, VISIBILITY_HZ);
     });
 
     scene.addEventListener('exit-vr', function () {
+      clearInterval(visTimer);
       window.location.href = 'index.html';
     });
 
