@@ -4,45 +4,148 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>Sommargatan GPS AR</title>
+  <title>Sommargatan GPS AR v005</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-  <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.5/aframe/build/aframe-ar.js"></script>
   <link rel="stylesheet" href="css/ui.css">
   <style>
-    html, body { margin: 0; overflow: hidden; background: transparent; }
+    html, body { margin: 0; overflow: hidden; background: #000; }
+
+    #start-screen {
+      position: fixed;
+      inset: 0;
+      background: #1a1a2e;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      z-index: 9999;
+      padding: 32px;
+      text-align: center;
+      font-family: sans-serif;
+    }
+    #start-screen h2 { margin: 0; font-size: 1.4rem; }
+    #gps-status {
+      font-size: 1.1rem;
+      padding: 12px 20px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 8px;
+      min-width: 220px;
+    }
+    #gps-status.ready { color: #6dffb0; }
+    #gps-status.searching { color: #ffdd57; }
+    #gps-status.error { color: #ff6b6b; }
+
+    #start-ar-btn {
+      padding: 14px 36px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      border: none;
+      border-radius: 10px;
+      background: #2a6b4a;
+      color: #fff;
+      cursor: pointer;
+      opacity: 0.4;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    #start-ar-btn.enabled {
+      opacity: 1;
+      pointer-events: all;
+    }
+    #back-start { color: #aaa; text-decoration: none; font-size: 0.9rem; margin-top: 8px; }
+
+    /* UI overlay shown inside AR session via DOM overlay */
+    #ui-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 12px 16px;
+      pointer-events: none;
+      z-index: 1000;
+    }
+    #ui-overlay button {
+      pointer-events: all;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 8px;
+      background: rgba(0,0,0,0.6);
+      color: #fff;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    #accuracy-label {
+      font-family: sans-serif;
+      font-size: 0.85rem;
+      color: #fff;
+      background: rgba(0,0,0,0.5);
+      padding: 6px 12px;
+      border-radius: 6px;
+    }
+
+    #error-overlay {
+      position: fixed;
+      inset: 0;
+      background: #1a1a2e;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      z-index: 9999;
+      padding: 32px;
+      text-align: center;
+      font-family: sans-serif;
+    }
+    #error-overlay h2 { color: #ff6b6b; margin: 0; }
+    #error-overlay a { color: #aaa; }
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
 
-  <div id="ui-overlay">
-    <div id="status-bar">
-      <span id="status-text">Söker GPS-position...</span>
-    </div>
-    <a href="index.html" id="back-btn">&#8592; Tillbaka</a>
+  <!-- ── Start screen (shown before AR session) ── -->
+  <div id="start-screen">
+    <h2>Sommargatan GPS AR</h2>
+    <div id="gps-status" class="searching">Söker GPS-position...</div>
+    <button id="start-ar-btn">Starta AR</button>
+    <a href="index.html" id="back-start">&#8592; Tillbaka</a>
   </div>
 
+  <!-- ── Error screen ── -->
   <div id="error-overlay" class="hidden">
-    <h2>Något gick fel</h2>
+    <h2>Fel</h2>
     <p id="error-message"></p>
     <a href="index.html">&#8592; Gå tillbaka</a>
   </div>
 
-  <!-- AR.js sköter kameraflödet som bakgrund; GPS hanteras manuellt i JS -->
+  <!-- ── DOM overlay: visible inside AR session ── -->
+  <div id="ui-overlay" class="hidden">
+    <button id="exit-ar-btn">&#10005; Avsluta AR</button>
+    <div id="accuracy-label"></div>
+  </div>
+
+  <!-- ── A-Frame scene ── -->
   <a-scene
-    arjs="sourceType: webcam; videoTexture: false; debugUIEnabled: false;"
-    renderer="antialias: true; alpha: true;"
+    id="ar-scene"
+    webxr="requiredFeatures: local-floor; optionalFeatures: dom-overlay; domOverlay: #ui-overlay"
+    renderer="antialias: true; colorManagement: true;"
     vr-mode-ui="enabled: false"
     loading-screen="enabled: false">
 
-    <a-assets timeout="15000">
+    <a-assets timeout="20000">
       <a-asset-item id="cake-model" src="assets/models/cake.glb"></a-asset-item>
     </a-assets>
 
-    <!-- Debugmarkör: syns om GPS fungerar och du tittar åt rätt håll -->
+    <!-- Debug sphere: 1 m radius, red. Visible once AR starts. -->
     <a-sphere
       id="debug-sphere"
       color="#ff2200"
-      radius="1.5"
+      radius="1"
       visible="false">
     </a-sphere>
 
@@ -53,57 +156,123 @@
       visible="false">
     </a-gltf-model>
 
-    <!-- Standard A-Frame-kamera: läser kompass via look-controls -->
-    <a-camera look-controls position="0 1.6 0"></a-camera>
+    <a-camera></a-camera>
   </a-scene>
 
   <script>
     var TARGET_LAT = 56.87712;
     var TARGET_LON = 14.80690;
-    var MAX_ACC = 8; // ignorera mätningar sämre än ±8 m
+    var MAX_ACC    = 8;
 
-    // +X = öst, -Z = norr (matchar A-Frame:s koordinatsystem)
+    var lastGoodPos = null;
+    var lastAcc     = null;
+
+    // ── Screens & elements ──
+    var startScreen   = document.getElementById('start-screen');
+    var errorOverlay  = document.getElementById('error-overlay');
+    var uiOverlay     = document.getElementById('ui-overlay');
+    var gpsStatus     = document.getElementById('gps-status');
+    var startBtn      = document.getElementById('start-ar-btn');
+    var exitBtn       = document.getElementById('exit-ar-btn');
+    var accLabel      = document.getElementById('accuracy-label');
+    var scene         = document.getElementById('ar-scene');
+    var cake          = document.getElementById('cake');
+    var sphere        = document.getElementById('debug-sphere');
+
+    // ── GPS offset (Mercator) ──
     function gpsOffset(userLat, userLon) {
-      var R = 6378137;
+      var R    = 6378137;
       var dLat = (TARGET_LAT - userLat) * Math.PI / 180;
       var dLon = (TARGET_LON - userLon) * Math.PI / 180;
       var midLat = ((TARGET_LAT + userLat) / 2) * Math.PI / 180;
       return { x: dLon * Math.cos(midLat) * R, z: -dLat * R };
     }
 
-    document.querySelector('a-scene').addEventListener('loaded', function () {
+    // ── Check WebXR support ──
+    if (!navigator.xr) {
+      showError('Din enhet eller webbläsare saknar WebXR-stöd. Prova Chrome på Android.');
+    } else {
+      navigator.xr.isSessionSupported('immersive-ar').then(function (supported) {
+        if (!supported) {
+          showError('WebXR AR (ARCore) stöds inte på den här enheten. Krävs: Chrome + Android med ARCore.');
+        } else {
+          startGPS();
+        }
+      });
+    }
+
+    // ── GPS watch ──
+    function startGPS() {
       if (!navigator.geolocation) {
-        document.getElementById('error-message').textContent = 'Din enhet saknar GPS-stöd.';
-        document.getElementById('error-overlay').classList.remove('hidden');
+        showError('GPS saknas på den här enheten.');
         return;
       }
 
-      var cake   = document.getElementById('cake');
-      var sphere = document.getElementById('debug-sphere');
-      var status = document.getElementById('status-text');
-
       navigator.geolocation.watchPosition(
         function (pos) {
-          if (pos.coords.accuracy > MAX_ACC) return;
-
-          var off = gpsOffset(pos.coords.latitude, pos.coords.longitude);
-
-          cake.setAttribute('position',   { x: off.x, y: 0,   z: off.z });
-          sphere.setAttribute('position', { x: off.x, y: 1.5, z: off.z });
-          cake.setAttribute('visible',   'true');
-          sphere.setAttribute('visible', 'true');
-
           var acc = Math.round(pos.coords.accuracy);
-          status.textContent = 'GPS aktiv ±' + acc + ' m';
+          lastAcc = acc;
+
+          if (acc <= MAX_ACC) {
+            lastGoodPos = pos.coords;
+            gpsStatus.textContent = 'GPS klar ±' + acc + ' m ✓';
+            gpsStatus.className = 'ready';
+            startBtn.classList.add('enabled');
+          } else {
+            gpsStatus.textContent = 'GPS söker... ±' + acc + ' m';
+            gpsStatus.className = 'searching';
+          }
         },
-        function () {
-          document.getElementById('error-message').textContent =
-            'GPS-åtkomst nekades. Tillåt platsdelning i webbläsarens inställningar.';
-          document.getElementById('error-overlay').classList.remove('hidden');
+        function (err) {
+          gpsStatus.textContent = 'GPS nekades';
+          gpsStatus.className = 'error';
+          showError('GPS-åtkomst nekades. Tillåt platsdelning i Chrome-inställningarna.');
         },
         { enableHighAccuracy: true }
       );
+    }
+
+    // ── Starta AR ──
+    startBtn.addEventListener('click', function () {
+      if (!lastGoodPos) return;
+
+      var off = gpsOffset(lastGoodPos.latitude, lastGoodPos.longitude);
+
+      cake.setAttribute('position',   { x: off.x, y: 0,   z: off.z });
+      sphere.setAttribute('position', { x: off.x, y: 1.0, z: off.z });
+
+      scene.enterAR();
     });
+
+    // ── AR session started ──
+    scene.addEventListener('enter-vr', function () {
+      startScreen.style.display = 'none';
+      uiOverlay.classList.remove('hidden');
+
+      cake.setAttribute('visible', 'true');
+      sphere.setAttribute('visible', 'true');
+
+      if (lastAcc !== null) {
+        accLabel.textContent = 'GPS ±' + lastAcc + ' m';
+      }
+    });
+
+    // ── AR session ended ──
+    scene.addEventListener('exit-vr', function () {
+      window.location.href = 'index.html';
+    });
+
+    // ── Avsluta AR ──
+    exitBtn.addEventListener('click', function () {
+      scene.exitVR();
+    });
+
+    // ── Error helper ──
+    function showError(msg) {
+      startScreen.classList.add('hidden');
+      document.getElementById('error-message').textContent = msg;
+      errorOverlay.classList.remove('hidden');
+    }
   </script>
 
 </body>
