@@ -1,0 +1,7 @@
+# Survey placements – Sommargatan AR
+# Kolumner: namn, lat (DD), lon (DD), elev (m över havet, valfritt)
+# ANKAR-raden definierar origo (fysisk ArUco-markör på plats)
+# Övriga rader: GLB-filnamn ur assets/models/
+namn,lat,lon,elev
+ANKAR,56.87712,14.80690,105.00
+cake.glb,56.87712,14.80690,105.00

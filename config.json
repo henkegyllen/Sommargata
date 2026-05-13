@@ -1,4 +1,7 @@
 {
+  "modelDefaults": {
+    "cake.glb": { "scale": "4 4 4" }
+  },
   "event": {
     "name": "Sommargatan 2026",
     "municipality": "Växjö Kommun",

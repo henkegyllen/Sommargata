@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>Sommargatan GPS AR v005</title>
+  <title>Sommargatan Survey AR v006</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <link rel="stylesheet" href="css/ui.css">
   <style>
@@ -19,23 +19,24 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 24px;
+      gap: 18px;
       z-index: 9999;
       padding: 32px;
       text-align: center;
       font-family: sans-serif;
     }
     #start-screen h2 { margin: 0; font-size: 1.4rem; }
-    #gps-status {
-      font-size: 1.1rem;
-      padding: 12px 20px;
+
+    .status-row {
+      font-size: 1rem;
+      padding: 10px 18px;
       background: rgba(255,255,255,0.08);
       border-radius: 8px;
-      min-width: 220px;
+      min-width: 260px;
     }
-    #gps-status.ready { color: #6dffb0; }
-    #gps-status.searching { color: #ffdd57; }
-    #gps-status.error { color: #ff6b6b; }
+    .status-row.ready    { color: #6dffb0; }
+    .status-row.warn     { color: #ffdd57; }
+    .status-row.error    { color: #ff6b6b; }
 
     #start-ar-btn {
       padding: 14px 36px;
@@ -50,13 +51,9 @@
       pointer-events: none;
       transition: opacity 0.3s;
     }
-    #start-ar-btn.enabled {
-      opacity: 1;
-      pointer-events: all;
-    }
-    #back-start { color: #aaa; text-decoration: none; font-size: 0.9rem; margin-top: 8px; }
+    #start-ar-btn.enabled { opacity: 1; pointer-events: all; }
+    #back-start { color: #aaa; text-decoration: none; font-size: 0.9rem; }
 
-    /* UI overlay shown inside AR session via DOM overlay */
     #ui-overlay {
       position: fixed;
       top: 0; left: 0; right: 0;
@@ -77,9 +74,9 @@
       font-size: 0.9rem;
       cursor: pointer;
     }
-    #accuracy-label {
+    #acc-label {
       font-family: sans-serif;
-      font-size: 0.85rem;
+      font-size: 0.8rem;
       color: #fff;
       background: rgba(0,0,0,0.5);
       padding: 6px 12px;
@@ -108,28 +105,30 @@
 </head>
 <body>
 
-  <!-- ── Start screen (shown before AR session) ── -->
+  <!-- ── Startskärm ── -->
   <div id="start-screen">
-    <h2>Sommargatan GPS AR</h2>
-    <div id="gps-status" class="searching">Söker GPS-position...</div>
+    <h2>Sommargatan Survey AR</h2>
+    <div id="load-status"  class="status-row warn">Laddar placements.csv...</div>
+    <div id="gps-status"   class="status-row warn hidden">Söker GPS...</div>
+    <div id="anchor-dist"  class="status-row hidden"></div>
     <button id="start-ar-btn">Starta AR</button>
     <a href="index.html" id="back-start">&#8592; Tillbaka</a>
   </div>
 
-  <!-- ── Error screen ── -->
+  <!-- ── Felskärm ── -->
   <div id="error-overlay" class="hidden">
     <h2>Fel</h2>
     <p id="error-message"></p>
     <a href="index.html">&#8592; Gå tillbaka</a>
   </div>
 
-  <!-- ── DOM overlay: visible inside AR session ── -->
+  <!-- ── DOM overlay (visas inuti AR-sessionen) ── -->
   <div id="ui-overlay" class="hidden">
     <button id="exit-ar-btn">&#10005; Avsluta AR</button>
-    <div id="accuracy-label"></div>
+    <div id="acc-label"></div>
   </div>
 
-  <!-- ── A-Frame scene ── -->
+  <!-- ── A-Frame-scen ── -->
   <a-scene
     id="ar-scene"
     webxr="requiredFeatures: local-floor; optionalFeatures: dom-overlay; domOverlay: #ui-overlay"
@@ -137,137 +136,297 @@
     vr-mode-ui="enabled: false"
     loading-screen="enabled: false">
 
-    <a-assets timeout="20000">
-      <a-asset-item id="cake-model" src="assets/models/cake.glb"></a-asset-item>
-    </a-assets>
-
-    <!-- Debug sphere: 1 m radius, red. Visible once AR starts. -->
-    <a-sphere
-      id="debug-sphere"
-      color="#ff2200"
-      radius="1"
-      visible="false">
-    </a-sphere>
-
-    <a-gltf-model
-      id="cake"
-      src="#cake-model"
-      scale="4 4 4"
-      visible="false">
-    </a-gltf-model>
-
+    <a-assets id="asset-manager" timeout="30000"></a-assets>
     <a-camera></a-camera>
   </a-scene>
 
   <script>
-    var TARGET_LAT = 56.87712;
-    var TARGET_LON = 14.80690;
-    var MAX_ACC    = 8;
+    /* ─────────────────────────────────────────
+       Konfiguration
+    ───────────────────────────────────────── */
+    var MAX_GPS_ACC = 15; // m — acceptera GPS-mätningar upp till ±15 m
 
-    var lastGoodPos = null;
-    var lastAcc     = null;
+    /* ─────────────────────────────────────────
+       Tillstånd
+    ───────────────────────────────────────── */
+    var anchor        = null;   // ANKAR-raden från CSV
+    var placedObjects = [];     // övriga rader med beräknade offsets
+    var modelDefaults = {};     // från config.json
+    var lastGoodPos   = null;
+    var lastAcc       = null;
 
-    // ── Screens & elements ──
-    var startScreen   = document.getElementById('start-screen');
-    var errorOverlay  = document.getElementById('error-overlay');
-    var uiOverlay     = document.getElementById('ui-overlay');
-    var gpsStatus     = document.getElementById('gps-status');
-    var startBtn      = document.getElementById('start-ar-btn');
-    var exitBtn       = document.getElementById('exit-ar-btn');
-    var accLabel      = document.getElementById('accuracy-label');
-    var scene         = document.getElementById('ar-scene');
-    var cake          = document.getElementById('cake');
-    var sphere        = document.getElementById('debug-sphere');
+    /* ─────────────────────────────────────────
+       DOM-refs
+    ───────────────────────────────────────── */
+    var startScreen  = document.getElementById('start-screen');
+    var errorOverlay = document.getElementById('error-overlay');
+    var uiOverlay    = document.getElementById('ui-overlay');
+    var loadStatus   = document.getElementById('load-status');
+    var gpsStatus    = document.getElementById('gps-status');
+    var anchorDist   = document.getElementById('anchor-dist');
+    var startBtn     = document.getElementById('start-ar-btn');
+    var exitBtn      = document.getElementById('exit-ar-btn');
+    var accLabel     = document.getElementById('acc-label');
+    var scene        = document.getElementById('ar-scene');
+    var assets       = document.getElementById('asset-manager');
 
-    // ── GPS offset (Mercator) ──
-    function gpsOffset(userLat, userLon) {
-      var R    = 6378137;
-      var dLat = (TARGET_LAT - userLat) * Math.PI / 180;
-      var dLon = (TARGET_LON - userLon) * Math.PI / 180;
-      var midLat = ((TARGET_LAT + userLat) / 2) * Math.PI / 180;
-      return { x: dLon * Math.cos(midLat) * R, z: -dLat * R };
+    /* ─────────────────────────────────────────
+       CSV-parser
+       Stödjer header-rad (namn/name), kommentarer (#)
+       och valfri elev-kolumn.
+    ───────────────────────────────────────── */
+    function parseCSV(text) {
+      var rows = [];
+      text.trim().split(/\r?\n/).forEach(function (line) {
+        line = line.trim();
+        if (!line || line.charAt(0) === '#') return;
+        var c = line.split(',').map(function (s) { return s.trim(); });
+        if (c[0].toLowerCase() === 'namn' || c[0].toLowerCase() === 'name') return;
+        var lat = parseFloat(c[1]);
+        var lon = parseFloat(c[2]);
+        if (isNaN(lat) || isNaN(lon)) return;
+        rows.push({
+          namn: c[0],
+          lat:  lat,
+          lon:  lon,
+          elev: (c[3] !== undefined && c[3] !== '') ? parseFloat(c[3]) : null,
+          modelLoaded: false,
+          arActive:    false
+        });
+      });
+      return rows;
     }
 
-    // ── Check WebXR support ──
-    if (!navigator.xr) {
-      showError('Din enhet eller webbläsare saknar WebXR-stöd. Prova Chrome på Android.');
-    } else {
-      navigator.xr.isSessionSupported('immersive-ar').then(function (supported) {
-        if (!supported) {
-          showError('WebXR AR (ARCore) stöds inte på den här enheten. Krävs: Chrome + Android med ARCore.');
+    /* ─────────────────────────────────────────
+       Geodetisk offset: ankar → objekt (meter)
+       +X = öst, +Y = upp, -Z = norr (A-Frame)
+    ───────────────────────────────────────── */
+    function surveyOffset(anc, obj) {
+      var R    = 6378137;
+      var dLat = (obj.lat - anc.lat) * Math.PI / 180;
+      var dLon = (obj.lon - anc.lon) * Math.PI / 180;
+      var midLat = ((obj.lat + anc.lat) / 2) * Math.PI / 180;
+      return {
+        x: dLon * Math.cos(midLat) * R,
+        y: (obj.elev != null && anc.elev != null) ? (obj.elev - anc.elev) : 0,
+        z: -dLat * R
+      };
+    }
+
+    /* ─────────────────────────────────────────
+       Avstånd från given lat/lon till ankaret
+    ───────────────────────────────────────── */
+    function distToAnchor(lat, lon) {
+      if (!anchor) return null;
+      var off = surveyOffset(anchor, { lat: lat, lon: lon, elev: anchor.elev });
+      return Math.sqrt(off.x * off.x + off.z * off.z);
+    }
+
+    /* ─────────────────────────────────────────
+       Skalstring för en modell (från config)
+    ───────────────────────────────────────── */
+    function getScale(filename) {
+      return (modelDefaults[filename] && modelDefaults[filename].scale)
+        ? modelDefaults[filename].scale
+        : '1 1 1';
+    }
+
+    /* ─────────────────────────────────────────
+       Hjälpfunktion: position-sträng
+    ───────────────────────────────────────── */
+    function posStr(x, y, z) {
+      return x.toFixed(3) + ' ' + y.toFixed(3) + ' ' + z.toFixed(3);
+    }
+
+    /* ─────────────────────────────────────────
+       Bygg A-Frame-entiteter för alla objekt
+       (osynliga tills AR-sessionen startar)
+    ───────────────────────────────────────── */
+    function buildScene() {
+      placedObjects.forEach(function (obj, idx) {
+        var off      = obj.offset;
+        var assetId  = 'survey-asset-' + idx;
+        var scaleStr = getScale(obj.namn);
+
+        // Asset-post
+        var assetItem = document.createElement('a-asset-item');
+        assetItem.setAttribute('id',  assetId);
+        assetItem.setAttribute('src', 'assets/models/' + obj.namn);
+        assets.appendChild(assetItem);
+
+        // Platshållarkub (visas om GLB inte laddat ännu när AR startar)
+        var box = document.createElement('a-box');
+        box.setAttribute('id',       'box-' + idx);
+        box.setAttribute('color',    '#4a90d9');
+        box.setAttribute('opacity',  '0.85');
+        box.setAttribute('position', posStr(off.x, off.y + 0.5, off.z));
+        box.setAttribute('visible',  'false');
+        scene.appendChild(box);
+
+        // GLB-modell
+        var model = document.createElement('a-gltf-model');
+        model.setAttribute('id',       'model-' + idx);
+        model.setAttribute('src',      '#' + assetId);
+        model.setAttribute('position', posStr(off.x, off.y, off.z));
+        model.setAttribute('scale',    scaleStr);
+        model.setAttribute('visible',  'false');
+
+        model.addEventListener('model-loaded', function () {
+          obj.modelLoaded = true;
+          if (obj.arActive) {
+            document.getElementById('box-' + idx).setAttribute('visible', 'false');
+            model.setAttribute('visible', 'true');
+          }
+        });
+
+        scene.appendChild(model);
+      });
+    }
+
+    /* ─────────────────────────────────────────
+       Gör alla objekt synliga när AR startar
+    ───────────────────────────────────────── */
+    function showObjects() {
+      placedObjects.forEach(function (obj, idx) {
+        obj.arActive = true;
+        if (obj.modelLoaded) {
+          document.getElementById('model-' + idx).setAttribute('visible', 'true');
         } else {
+          document.getElementById('box-' + idx).setAttribute('visible', 'true');
+        }
+      });
+    }
+
+    /* ─────────────────────────────────────────
+       Laddning: config.json + placements.csv
+    ───────────────────────────────────────── */
+    Promise.all([
+      fetch('config.json').then(function (r) {
+        if (!r.ok) throw new Error('config.json saknas');
+        return r.json();
+      }),
+      fetch('assets/placements.csv').then(function (r) {
+        if (!r.ok) throw new Error('assets/placements.csv saknas (HTTP ' + r.status + ')');
+        return r.text();
+      })
+    ]).then(function (results) {
+      var config  = results[0];
+      var csvText = results[1];
+
+      modelDefaults = config.modelDefaults || {};
+
+      var rows = parseCSV(csvText);
+      anchor = rows.find(function (r) { return r.namn.toUpperCase() === 'ANKAR'; });
+
+      if (!anchor) {
+        showError('Ingen ANKAR-rad hittades i placements.csv.');
+        return;
+      }
+
+      placedObjects = rows
+        .filter(function (r) { return r.namn.toUpperCase() !== 'ANKAR'; })
+        .map(function (r) {
+          r.offset = surveyOffset(anchor, r);
+          return r;
+        });
+
+      var n = placedObjects.length;
+      loadStatus.textContent = n + ' objekt laddade ✓';
+      loadStatus.className   = 'status-row ready';
+
+      buildScene();
+      checkWebXR();
+
+    }).catch(function (err) {
+      showError('Laddningsfel: ' + err.message);
+    });
+
+    /* ─────────────────────────────────────────
+       WebXR-stödskontroll
+    ───────────────────────────────────────── */
+    function checkWebXR() {
+      if (!navigator.xr) {
+        showError('Webbläsaren saknar WebXR. Prova Chrome på Android.');
+        return;
+      }
+      navigator.xr.isSessionSupported('immersive-ar').then(function (ok) {
+        if (!ok) {
+          showError('WebXR AR (ARCore) stöds inte. Krävs: Chrome + Android med ARCore installerat.');
+        } else {
+          gpsStatus.classList.remove('hidden');
           startGPS();
         }
       });
     }
 
-    // ── GPS watch ──
+    /* ─────────────────────────────────────────
+       GPS-bevakning
+    ───────────────────────────────────────── */
     function startGPS() {
       if (!navigator.geolocation) {
-        showError('GPS saknas på den här enheten.');
+        showError('Enheten saknar GPS.');
         return;
       }
-
       navigator.geolocation.watchPosition(
         function (pos) {
           var acc = Math.round(pos.coords.accuracy);
           lastAcc = acc;
 
-          if (acc <= MAX_ACC) {
+          if (acc <= MAX_GPS_ACC) {
             lastGoodPos = pos.coords;
-            gpsStatus.textContent = 'GPS klar ±' + acc + ' m ✓';
-            gpsStatus.className = 'ready';
+            gpsStatus.textContent = 'GPS ±' + acc + ' m ✓';
+            gpsStatus.className   = 'status-row ready';
             startBtn.classList.add('enabled');
           } else {
             gpsStatus.textContent = 'GPS söker... ±' + acc + ' m';
-            gpsStatus.className = 'searching';
+            gpsStatus.className   = 'status-row warn';
+          }
+
+          // Avstånd till ankaret
+          if (anchor) {
+            var d = distToAnchor(pos.coords.latitude, pos.coords.longitude);
+            anchorDist.classList.remove('hidden');
+            anchorDist.textContent  = 'Avstånd till ankare: ' + Math.round(d) + ' m';
+            anchorDist.className    = 'status-row ' +
+              (d < 10 ? 'ready' : d < 50 ? 'warn' : 'error');
           }
         },
-        function (err) {
-          gpsStatus.textContent = 'GPS nekades';
-          gpsStatus.className = 'error';
-          showError('GPS-åtkomst nekades. Tillåt platsdelning i Chrome-inställningarna.');
+        function () {
+          showError('GPS nekades. Tillåt platsdelning i Chrome-inställningarna.');
         },
         { enableHighAccuracy: true }
       );
     }
 
-    // ── Starta AR ──
+    /* ─────────────────────────────────────────
+       Knappar
+    ───────────────────────────────────────── */
     startBtn.addEventListener('click', function () {
       if (!lastGoodPos) return;
-
-      var off = gpsOffset(lastGoodPos.latitude, lastGoodPos.longitude);
-
-      cake.setAttribute('position',   { x: off.x, y: 0,   z: off.z });
-      sphere.setAttribute('position', { x: off.x, y: 1.0, z: off.z });
-
       scene.enterAR();
     });
 
-    // ── AR session started ──
-    scene.addEventListener('enter-vr', function () {
-      startScreen.style.display = 'none';
-      uiOverlay.classList.remove('hidden');
-
-      cake.setAttribute('visible', 'true');
-      sphere.setAttribute('visible', 'true');
-
-      if (lastAcc !== null) {
-        accLabel.textContent = 'GPS ±' + lastAcc + ' m';
-      }
-    });
-
-    // ── AR session ended ──
-    scene.addEventListener('exit-vr', function () {
-      window.location.href = 'index.html';
-    });
-
-    // ── Avsluta AR ──
     exitBtn.addEventListener('click', function () {
       scene.exitVR();
     });
 
-    // ── Error helper ──
+    /* ─────────────────────────────────────────
+       AR-sessionshändelser
+    ───────────────────────────────────────── */
+    scene.addEventListener('enter-vr', function () {
+      startScreen.style.display = 'none';
+      uiOverlay.classList.remove('hidden');
+      showObjects();
+      if (lastAcc !== null) accLabel.textContent = 'GPS ±' + lastAcc + ' m';
+    });
+
+    scene.addEventListener('exit-vr', function () {
+      window.location.href = 'index.html';
+    });
+
+    /* ─────────────────────────────────────────
+       Felvisning
+    ───────────────────────────────────────── */
     function showError(msg) {
       startScreen.classList.add('hidden');
       document.getElementById('error-message').textContent = msg;
