@@ -14,7 +14,6 @@
 </head>
 <body>
 
-  <!-- UI-lager -->
   <div id="ui-overlay">
     <div id="status-bar">
       <span id="status-text">Söker GPS-position...</span>
@@ -22,14 +21,13 @@
     <a href="index.html" id="back-btn">&#8592; Tillbaka</a>
   </div>
 
-  <!-- Fel-överlägget -->
   <div id="error-overlay" class="hidden">
     <h2>Något gick fel</h2>
     <p id="error-message"></p>
     <a href="index.html">&#8592; Gå tillbaka</a>
   </div>
 
-  <!-- GPS AR-scen -->
+  <!-- AR.js sköter kameraflödet som bakgrund; GPS hanteras manuellt i JS -->
   <a-scene
     arjs="sourceType: webcam; videoTexture: false; debugUIEnabled: false;"
     renderer="antialias: true; alpha: true;"
@@ -40,40 +38,64 @@
       <a-asset-item id="cake-model" src="assets/models/cake.glb"></a-asset-item>
     </a-assets>
 
-    <!-- Debugmarkör: röd sfär syns alltid om GPS fungerar, kräver ingen modell -->
+    <!-- Debugmarkör: syns om GPS fungerar och du tittar åt rätt håll -->
     <a-sphere
+      id="debug-sphere"
       color="#ff2200"
       radius="1.5"
-      position="0 1.5 0"
-      gps-projected-entity-place="latitude: 56.87712; longitude: 14.80690;">
+      visible="false">
     </a-sphere>
 
     <a-gltf-model
+      id="cake"
       src="#cake-model"
-      rotation="0 0 0"
       scale="8 8 8"
-      position="0 0 0"
-      gps-projected-entity-place="latitude: 56.87712; longitude: 14.80690;">
+      visible="false">
     </a-gltf-model>
 
-    <a-camera gps-projected-camera rotation-reader></a-camera>
+    <!-- Standard A-Frame-kamera: läser kompass via look-controls -->
+    <a-camera look-controls position="0 1.6 0"></a-camera>
   </a-scene>
 
   <script>
-    (function () {
-      var statusEl = document.getElementById('status-text');
+    var TARGET_LAT = 56.87712;
+    var TARGET_LON = 14.80690;
 
+    // Beräknar offset i meter från användaren till målpunkten.
+    // +X = öst, -Z = norr (matchar A-Frame:s koordinatsystem).
+    function gpsOffset(userLat, userLon) {
+      var R = 6378137;
+      var dLat = (TARGET_LAT - userLat) * Math.PI / 180;
+      var dLon = (TARGET_LON - userLon) * Math.PI / 180;
+      var midLat = ((TARGET_LAT + userLat) / 2) * Math.PI / 180;
+      return {
+        x: dLon * Math.cos(midLat) * R,
+        z: -dLat * R
+      };
+    }
+
+    document.querySelector('a-scene').addEventListener('loaded', function () {
       if (!navigator.geolocation) {
-        document.getElementById('error-message').textContent =
-          'Din enhet saknar GPS-stöd.';
+        document.getElementById('error-message').textContent = 'Din enhet saknar GPS-stöd.';
         document.getElementById('error-overlay').classList.remove('hidden');
         return;
       }
 
+      var cake   = document.getElementById('cake');
+      var sphere = document.getElementById('debug-sphere');
+      var status = document.getElementById('status-text');
+
       navigator.geolocation.watchPosition(
         function (pos) {
+          var off = gpsOffset(pos.coords.latitude, pos.coords.longitude);
+
+          cake.setAttribute('position',   { x: off.x, y: 0,   z: off.z });
+          sphere.setAttribute('position', { x: off.x, y: 1.5, z: off.z });
+          cake.setAttribute('visible',   'true');
+          sphere.setAttribute('visible', 'true');
+
           var acc = Math.round(pos.coords.accuracy);
-          statusEl.textContent = 'GPS aktiv ±' + acc + ' m – rikta kameran mot platsen';
+          status.textContent = 'GPS aktiv ±' + acc + ' m';
         },
         function () {
           document.getElementById('error-message').textContent =
@@ -82,7 +104,7 @@
         },
         { enableHighAccuracy: true }
       );
-    })();
+    });
   </script>
 
 </body>
