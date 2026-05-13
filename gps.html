@@ -49,7 +49,7 @@
     <a-gltf-model
       id="cake"
       src="#cake-model"
-      scale="8 8 8"
+      scale="4 4 4"
       visible="false">
     </a-gltf-model>
 
@@ -60,18 +60,26 @@
   <script>
     var TARGET_LAT = 56.87712;
     var TARGET_LON = 14.80690;
+    var SMOOTH = 0.2;      // EMA-faktor: 20% nytt värde, 80% historia
+    var MAX_ACC = 20;      // ignorera mätningar sämre än ±20 m
+    var smoothLat = null, smoothLon = null;
 
-    // Beräknar offset i meter från användaren till målpunkten.
-    // +X = öst, -Z = norr (matchar A-Frame:s koordinatsystem).
+    function applyEMA(lat, lon) {
+      if (smoothLat === null) { smoothLat = lat; smoothLon = lon; }
+      else {
+        smoothLat = SMOOTH * lat + (1 - SMOOTH) * smoothLat;
+        smoothLon = SMOOTH * lon + (1 - SMOOTH) * smoothLon;
+      }
+      return { lat: smoothLat, lon: smoothLon };
+    }
+
+    // +X = öst, -Z = norr (matchar A-Frame:s koordinatsystem)
     function gpsOffset(userLat, userLon) {
       var R = 6378137;
       var dLat = (TARGET_LAT - userLat) * Math.PI / 180;
       var dLon = (TARGET_LON - userLon) * Math.PI / 180;
       var midLat = ((TARGET_LAT + userLat) / 2) * Math.PI / 180;
-      return {
-        x: dLon * Math.cos(midLat) * R,
-        z: -dLat * R
-      };
+      return { x: dLon * Math.cos(midLat) * R, z: -dLat * R };
     }
 
     document.querySelector('a-scene').addEventListener('loaded', function () {
@@ -87,7 +95,10 @@
 
       navigator.geolocation.watchPosition(
         function (pos) {
-          var off = gpsOffset(pos.coords.latitude, pos.coords.longitude);
+          if (pos.coords.accuracy > MAX_ACC) return; // hoppa över dåliga mätningar
+
+          var s   = applyEMA(pos.coords.latitude, pos.coords.longitude);
+          var off = gpsOffset(s.lat, s.lon);
 
           cake.setAttribute('position',   { x: off.x, y: 0,   z: off.z });
           sphere.setAttribute('position', { x: off.x, y: 1.5, z: off.z });
