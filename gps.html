@@ -60,18 +60,7 @@
   <script>
     var TARGET_LAT = 56.87712;
     var TARGET_LON = 14.80690;
-    var SMOOTH = 0.2;      // EMA-faktor: 20% nytt värde, 80% historia
-    var MAX_ACC = 20;      // ignorera mätningar sämre än ±20 m
-    var smoothLat = null, smoothLon = null;
-
-    function applyEMA(lat, lon) {
-      if (smoothLat === null) { smoothLat = lat; smoothLon = lon; }
-      else {
-        smoothLat = SMOOTH * lat + (1 - SMOOTH) * smoothLat;
-        smoothLon = SMOOTH * lon + (1 - SMOOTH) * smoothLon;
-      }
-      return { lat: smoothLat, lon: smoothLon };
-    }
+    var MAX_ACC = 8; // ignorera mätningar sämre än ±8 m
 
     // +X = öst, -Z = norr (matchar A-Frame:s koordinatsystem)
     function gpsOffset(userLat, userLon) {
@@ -95,10 +84,9 @@
 
       navigator.geolocation.watchPosition(
         function (pos) {
-          if (pos.coords.accuracy > MAX_ACC) return; // hoppa över dåliga mätningar
+          if (pos.coords.accuracy > MAX_ACC) return;
 
-          var s   = applyEMA(pos.coords.latitude, pos.coords.longitude);
-          var off = gpsOffset(s.lat, s.lon);
+          var off = gpsOffset(pos.coords.latitude, pos.coords.longitude);
 
           cake.setAttribute('position',   { x: off.x, y: 0,   z: off.z });
           sphere.setAttribute('position', { x: off.x, y: 1.5, z: off.z });
