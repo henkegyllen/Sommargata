@@ -10,7 +10,7 @@
 # SPARR_<namn>  – Siktbarriär. Objekt döljs om siktlinjen observer→objekt skär linjen.
 #
 namn,lat,lon,elev,synlig_inom,scale
-ANKAR,56.87712,14.80690,105.00,,
+ANKAR,56.87712,14.80690,105.00
 Polkagris_1.glb,56.8788318,14.8015939,105.00,30,1
 Polkagris_2.glb,56.8788911,14.8015118,105.00,30,1
 Polkagris_3.glb,56.8789214,14.801591,105.00,30,1
