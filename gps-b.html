@@ -143,7 +143,7 @@
 
     var anchor          = null;
     var placedObjects   = [];
-    var markerRows      = [];    /* PNG-rader från CSV: { namn, lat, lon, elev } */
+    var markerRows      = [];    /* PNG-rader från CSV: { namn, lat, lon, elev, bearing } */
     var markerBitmaps   = [];    /* ImageBitmap för varje markör */
     var barriers        = [];
     var modelDefaults   = {};
@@ -232,33 +232,55 @@
     });
 
     /*
-     * Korrigering: flytta scene-root så att den detekterade markörnoden
-     * sammanfaller med markörens inmätta position (från CSV).
+     * Extraherar markörens bäring i WebXR-rymden från pose-matrisen.
+     * Kolumn 2 (index 8,9,10) = +Z-axel för image-space = markörens normal (mot betraktaren).
+     * Returnerar grader CW från north (0–360).
+     */
+    function getBearingFromPose(pose) {
+      var m = pose.transform.matrix;
+      var bearing = Math.atan2(m[8], -m[10]) * 180 / Math.PI;
+      return (bearing + 360) % 360;
+    }
+
+    /*
+     * Korrigerar scene-root position och rotation så att markörens inmätta
+     * position (GPS-koordinater i CSV) sammanfaller med den detekterade posen.
      *
-     * Kompassrotationen är redan satt på scene-root (Y = -compassHeading).
-     * Vi behöver rotera markörens lokala position med samma vinkel
-     * innan vi beräknar förflyttningen.
+     * Rotation: rotY = detBearing − realBearing kompenserar för att
+     * ARCore-rymdens horisontella riktning är godtycklig vid sessionstart.
+     *
+     * Position: scene-root förflyttas så att sceneRoot + R(rotY)*local = det.
+     * Three.js rotation.y = θ: x' = x·cos(θ) + z·sin(θ), z' = −x·sin(θ) + z·cos(θ).
      */
     function applyMarkerCorrection(pose, markerRow) {
       correctionDone = true;
-      var det = pose.transform.position;              /* detekterad position i WebXR */
-
-      /* Markörens position i scene-root lokal rymd (offset från ankaret) */
+      var det   = pose.transform.position;
       var local = surveyOffset(anchor, markerRow.lat, markerRow.lon, markerRow.elev);
 
-      /* Rotera lokala positionen med kompassvinkeln */
-      var H    = compassHeading !== null ? compassHeading * Math.PI / 180 : 0;
-      var rotX =  local.x * Math.cos(H) + local.z * Math.sin(H);
-      var rotZ = -local.x * Math.sin(H) + local.z * Math.cos(H);
+      var rotY;
+      if (markerRow.bearing !== null) {
+        var detBearing = getBearingFromPose(pose);
+        rotY = detBearing - markerRow.bearing;
+        console.log('Marker', markerRow.namn,
+          'detBearing', detBearing.toFixed(1),
+          'realBearing', markerRow.bearing,
+          'rotY', rotY.toFixed(1));
+      } else if (compassHeading !== null) {
+        rotY = -compassHeading;
+      } else {
+        rotY = 0;
+      }
 
-      /* Scene-root position = detekterad pos minus roterad lokal pos */
+      var θ    = rotY * Math.PI / 180;
+      var rotX =  local.x * Math.cos(θ) + local.z * Math.sin(θ);
+      var rotZ = -local.x * Math.sin(θ) + local.z * Math.cos(θ);
+
+      sceneRoot.setAttribute('rotation', '0 ' + rotY.toFixed(1) + ' 0');
       sceneRoot.setAttribute('position',
         (det.x - rotX).toFixed(3) + ' 0 ' + (det.z - rotZ).toFixed(3));
 
       markerLabel.textContent = markerRow.namn + ' hittad – korrigerad ✓';
       markerLabel.className   = 'found';
-      console.log('Korrigering från', markerRow.namn, '→ pos',
-        (det.x - rotX).toFixed(2), '0', (det.z - rotZ).toFixed(2));
     }
 
     /* ── CSV-parser ── */
@@ -276,9 +298,15 @@
         } else {
           var lat=parseFloat(c[1]),lon=parseFloat(c[2]);
           if (isNaN(lat)||isNaN(lon)) return;
-          objectRows.push({namn:nam,lat:lat,lon:lon,elev:val(c[3]),
-            synligInom:val(c[4]),csvScale:parseScale(c[5]),
-            modelLoaded:false,arActive:false,currentlyVisible:false});
+          if (nam.toLowerCase().endsWith('.png')) {
+            objectRows.push({namn:nam,lat:lat,lon:lon,elev:val(c[3]),
+              bearing:val(c[4]),synligInom:null,csvScale:null,
+              modelLoaded:false,arActive:false,currentlyVisible:false});
+          } else {
+            objectRows.push({namn:nam,lat:lat,lon:lon,elev:val(c[3]),
+              synligInom:val(c[4]),csvScale:parseScale(c[5]),
+              modelLoaded:false,arActive:false,currentlyVisible:false});
+          }
         }
       });
       return {objectRows:objectRows, sparrRows:sparrRows};
