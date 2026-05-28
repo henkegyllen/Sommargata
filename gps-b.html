@@ -16,13 +16,11 @@
       padding: 32px; text-align: center; font-family: sans-serif;
     }
     #start-screen h2 { margin: 0; font-size: 1.4rem; }
-    #start-screen .method-badge {
+    .method-badge {
       background: #c0392b; color: #fff; font-size: 0.8rem;
       padding: 4px 12px; border-radius: 20px; letter-spacing: 0.5px;
     }
-    #start-screen .method-desc {
-      font-size: 0.85rem; color: #9999bb; max-width: 300px; line-height: 1.5;
-    }
+    .method-desc { font-size: 0.85rem; color: #9999bb; max-width: 300px; line-height: 1.5; }
     .status-row {
       font-size: 1rem; padding: 10px 18px;
       background: rgba(255,255,255,0.08); border-radius: 8px; min-width: 260px;
@@ -50,7 +48,7 @@
     #marker-label {
       font-family: sans-serif; font-size: 0.85rem; color: #fff;
       background: rgba(0,0,0,0.65); padding: 8px 16px; border-radius: 8px;
-      max-width: 280px; text-align: center;
+      max-width: 300px; text-align: center;
     }
     #marker-label.found { color: #6dffb0; }
     #error-overlay {
@@ -70,13 +68,12 @@
     <span class="method-badge">METOD B: BILDSPÅRNING</span>
     <h2>Sommargatan AR</h2>
     <p class="method-desc">
-      Kameran detekterar ArUco-markören automatiskt och korrigerar positionen
-      till cm-noggrannhet. Rikta kameran mot markören när AR har startat.
+      Kameran känner igen ArUco-markörerna automatiskt och korrigerar positionen
+      till cm-noggrannhet. Rikta kameran mot valfri markör när AR har startat.
     </p>
-    <div id="load-status"     class="status-row warn">Laddar placements.csv...</div>
-    <div id="image-status"    class="status-row warn hidden">Laddar markörbilder...</div>
-    <div id="compass-status"  class="status-row warn hidden">Söker kompass...</div>
-    <div id="tracking-support" class="status-row hidden"></div>
+    <div id="load-status"    class="status-row warn">Laddar placements.csv...</div>
+    <div id="image-status"   class="status-row warn hidden">Laddar markörbilder...</div>
+    <div id="compass-status" class="status-row warn hidden">Söker kompass...</div>
     <button id="start-ar-btn">Starta AR</button>
     <a href="index.html" id="back-start">&#8592; Tillbaka</a>
   </div>
@@ -89,7 +86,7 @@
 
   <div id="ui-overlay" class="hidden">
     <button id="exit-ar-btn">&#10005; Avsluta AR</button>
-    <div id="marker-label">Rikta kameran mot ArUco-markören...</div>
+    <div id="marker-label">Rikta kameran mot en ArUco-markör...</div>
   </div>
 
   <a-scene
@@ -105,43 +102,40 @@
 
   <script>
     /*
-     * Metod B – WebXR Image Tracking
+     * Metod B – WebXR Image Tracking med flera markörbilder
      *
-     * Kräver:  assets/markers/ankar.png
-     *          → Ladda upp den faktiska utskrivna ArUco-bilden (exakt samma fil
-     *            som skrevs ut och sitter på plats i verkligheten).
+     * Markörbilderna läses från placements.csv (rader med .png).
+     * Bildfilerna måste laddas upp till:  assets/markers/<Bild_xx.png>
+     * – exakt samma PNG som skrevs ut och sitter på plats i verkligheten.
      *
-     * MARKER_SIZE_M: bredden på den fysiska utskriften i meter.
-     *                Mät din utskrift och ändra värdet nedan.
+     * MARKER_SIZE_M: den fysiska bredden på utskriften i meter.
      */
-    var MARKER_FILE   = 'assets/markers/ankar.png';
-    var MARKER_SIZE_M = 0.20;   /* 20 cm – justera efter faktisk utskrift */
+    var MARKER_FOLDER = 'assets/markers/';
+    var MARKER_SIZE_M = 0.20;    /* 20 cm – ändra efter faktisk utskrift */
     var VISIBILITY_HZ = 100;
 
-    var anchor           = null;
-    var placedObjects    = [];
-    var barriers         = [];
-    var modelDefaults    = {};
-    var visTimer         = null;
-    var compassHeading   = null;
-    var markerImageBitmap = null;
-    var correctionDone   = false;
-    var xrSession        = null;
-    var xrRefSpace       = null;
+    var anchor          = null;
+    var placedObjects   = [];
+    var markerRows      = [];    /* PNG-rader från CSV: { namn, lat, lon, elev } */
+    var markerBitmaps   = [];    /* ImageBitmap för varje markör */
+    var barriers        = [];
+    var modelDefaults   = {};
+    var visTimer        = null;
+    var compassHeading  = null;
+    var correctionDone  = false;
 
-    var startScreen      = document.getElementById('start-screen');
-    var errorOverlay     = document.getElementById('error-overlay');
-    var uiOverlay        = document.getElementById('ui-overlay');
-    var loadStatus       = document.getElementById('load-status');
-    var imageStatus      = document.getElementById('image-status');
-    var compassStatus    = document.getElementById('compass-status');
-    var trackingSupport  = document.getElementById('tracking-support');
-    var startBtn         = document.getElementById('start-ar-btn');
-    var exitBtn          = document.getElementById('exit-ar-btn');
-    var markerLabel      = document.getElementById('marker-label');
-    var scene            = document.getElementById('ar-scene');
-    var assets           = document.getElementById('asset-manager');
-    var sceneRoot        = document.getElementById('scene-root');
+    var startScreen    = document.getElementById('start-screen');
+    var errorOverlay   = document.getElementById('error-overlay');
+    var uiOverlay      = document.getElementById('ui-overlay');
+    var loadStatus     = document.getElementById('load-status');
+    var imageStatus    = document.getElementById('image-status');
+    var compassStatus  = document.getElementById('compass-status');
+    var startBtn       = document.getElementById('start-ar-btn');
+    var exitBtn        = document.getElementById('exit-ar-btn');
+    var markerLabel    = document.getElementById('marker-label');
+    var scene          = document.getElementById('ar-scene');
+    var assets         = document.getElementById('asset-manager');
+    var sceneRoot      = document.getElementById('scene-root');
 
     /* ── Kompass ── */
     window.addEventListener('deviceorientationabsolute', function (e) {
@@ -159,7 +153,7 @@
       }
     });
 
-    /* ── A-Frame system: läser WebXR image-tracking varje frame ── */
+    /* ── A-Frame system: läser image-tracking varje frame ── */
     AFRAME.registerSystem('marker-tracker', {
       tick: function () {
         if (correctionDone) return;
@@ -171,10 +165,11 @@
         for (var i = 0; i < results.length; i++) {
           var r = results[i];
           if (r.trackingState === 'tracked' || r.trackingState === 'emulated') {
+            if (r.index >= markerRows.length) continue;
             var refSpace = renderer.xr.getReferenceSpace();
             var pose = frame.getPose(r.imageSpace, refSpace);
             if (pose) {
-              applyMarkerCorrection(pose);
+              applyMarkerCorrection(pose, markerRows[r.index]);
               return;
             }
           }
@@ -182,16 +177,34 @@
       }
     });
 
-    function applyMarkerCorrection(pose) {
+    /*
+     * Korrigering: flytta scene-root så att den detekterade markörnoden
+     * sammanfaller med markörens inmätta position (från CSV).
+     *
+     * Kompassrotationen är redan satt på scene-root (Y = -compassHeading).
+     * Vi behöver rotera markörens lokala position med samma vinkel
+     * innan vi beräknar förflyttningen.
+     */
+    function applyMarkerCorrection(pose, markerRow) {
       correctionDone = true;
-      var p = pose.transform.position;
-      /* Flytta scene-root så att ankaret (survey-origo) hamnar på markörens
-         detekterade position i WebXR-rymden. */
+      var det = pose.transform.position;              /* detekterad position i WebXR */
+
+      /* Markörens position i scene-root lokal rymd (offset från ankaret) */
+      var local = surveyOffset(anchor, markerRow.lat, markerRow.lon, markerRow.elev);
+
+      /* Rotera lokala positionen med kompassvinkeln */
+      var H    = compassHeading !== null ? compassHeading * Math.PI / 180 : 0;
+      var rotX =  local.x * Math.cos(H) + local.z * Math.sin(H);
+      var rotZ = -local.x * Math.sin(H) + local.z * Math.cos(H);
+
+      /* Scene-root position = detekterad pos minus roterad lokal pos */
       sceneRoot.setAttribute('position',
-        p.x.toFixed(3) + ' ' + p.y.toFixed(3) + ' ' + p.z.toFixed(3));
-      markerLabel.textContent = 'Markör hittad – korrigerad! ✓';
+        (det.x - rotX).toFixed(3) + ' 0 ' + (det.z - rotZ).toFixed(3));
+
+      markerLabel.textContent = markerRow.namn + ' hittad – korrigerad ✓';
       markerLabel.className   = 'found';
-      console.log('Markörkorrigering:', p.x.toFixed(2), p.y.toFixed(2), p.z.toFixed(2));
+      console.log('Korrigering från', markerRow.namn, '→ pos',
+        (det.x - rotX).toFixed(2), '0', (det.z - rotZ).toFixed(2));
     }
 
     /* ── CSV-parser ── */
@@ -205,7 +218,7 @@
         if (nam.toLowerCase() === 'namn' || nam.toLowerCase() === 'name') return;
         if (nam.toUpperCase().startsWith('SPARR_')) {
           var la1=parseFloat(c[1]),lo1=parseFloat(c[2]),la2=parseFloat(c[3]),lo2=parseFloat(c[4]);
-          if (!isNaN(la1) && !isNaN(la2)) sparrRows.push({namn:nam,lat1:la1,lon1:lo1,lat2:la2,lon2:lo2});
+          if (!isNaN(la1)&&!isNaN(la2)) sparrRows.push({namn:nam,lat1:la1,lon1:lo1,lat2:la2,lon2:lo2});
         } else {
           var lat=parseFloat(c[1]),lon=parseFloat(c[2]);
           if (isNaN(lat)||isNaN(lon)) return;
@@ -218,8 +231,7 @@
     }
     function val(s) { return (s!==undefined&&s!=='') ? parseFloat(s) : null; }
     function parseScale(s) {
-      if (!s||s.trim()==='') return null;
-      s=s.trim();
+      if (!s||s.trim()==='') return null; s=s.trim();
       return s.split(/\s+/).length===1 ? s+' '+s+' '+s : s;
     }
 
@@ -232,7 +244,7 @@
     }
 
     function buildBarriers(sparrRows) {
-      return sparrRows.map(function(row) {
+      return sparrRows.map(function(row){
         var p1=surveyOffset(anchor,row.lat1,row.lon1,null);
         var p2=surveyOffset(anchor,row.lat2,row.lon2,null);
         return {ax:p1.x,az:p1.z,bx:p2.x,bz:p2.z};
@@ -247,34 +259,27 @@
 
     function posStr(x,y,z) { return x.toFixed(3)+' '+y.toFixed(3)+' '+z.toFixed(3); }
 
-    /* ── Bygg scen ── */
+    /* ── Bygg 3D-scen (enbart GLB-filer) ── */
     function buildScene() {
-      placedObjects.forEach(function(obj,idx) {
+      placedObjects.forEach(function(obj,idx){
         var off=obj.offset, assetId='survey-asset-'+idx;
-        var assetItem=document.createElement('a-asset-item');
-        assetItem.setAttribute('id',assetId);
-        assetItem.setAttribute('src','assets/models/'+obj.namn);
-        assets.appendChild(assetItem);
+        var ai=document.createElement('a-asset-item');
+        ai.setAttribute('id',assetId); ai.setAttribute('src','assets/models/'+obj.namn);
+        assets.appendChild(ai);
 
         var box=document.createElement('a-box');
-        box.setAttribute('id','box-'+idx);
-        box.setAttribute('color','#e74c3c');
-        box.setAttribute('opacity','0.85');
-        box.setAttribute('position',posStr(off.x,off.y+0.5,off.z));
-        box.setAttribute('visible','false');
-        sceneRoot.appendChild(box);
+        box.setAttribute('id','box-'+idx); box.setAttribute('color','#e74c3c');
+        box.setAttribute('opacity','0.85'); box.setAttribute('position',posStr(off.x,off.y+0.5,off.z));
+        box.setAttribute('visible','false'); sceneRoot.appendChild(box);
 
         var model=document.createElement('a-gltf-model');
-        model.setAttribute('id','model-'+idx);
-        model.setAttribute('src','#'+assetId);
-        model.setAttribute('position',posStr(off.x,off.y,off.z));
-        model.setAttribute('scale',getScale(obj));
+        model.setAttribute('id','model-'+idx); model.setAttribute('src','#'+assetId);
+        model.setAttribute('position',posStr(off.x,off.y,off.z)); model.setAttribute('scale',getScale(obj));
         model.setAttribute('visible','false');
         model.addEventListener('model-loaded',function(){
           obj.modelLoaded=true;
           if(obj.arActive&&obj.currentlyVisible){
-            box.setAttribute('visible','false');
-            model.setAttribute('visible','true');
+            box.setAttribute('visible','false'); model.setAttribute('visible','true');
           }
         });
         sceneRoot.appendChild(model);
@@ -292,15 +297,12 @@
     }
 
     function updateVisibility() {
-      var threeCamera=scene.camera;
-      if(!threeCamera) return;
-      var camPos=new THREE.Vector3();
-      threeCamera.getWorldPosition(camPos);
+      var threeCamera=scene.camera; if(!threeCamera) return;
+      var camPos=new THREE.Vector3(); threeCamera.getWorldPosition(camPos);
       placedObjects.forEach(function(obj,idx){
-        var shouldShow=checkVisible(camPos,obj);
-        if(shouldShow===obj.currentlyVisible) return;
-        obj.currentlyVisible=shouldShow;
-        applyVisibility(idx,obj,shouldShow);
+        var s=checkVisible(camPos,obj);
+        if(s===obj.currentlyVisible) return;
+        obj.currentlyVisible=s; applyVisibility(idx,obj,s);
       });
     }
 
@@ -318,37 +320,31 @@
     }
 
     function applyVisibility(idx,obj,show) {
-      var model=document.getElementById('model-'+idx);
-      var box=document.getElementById('box-'+idx);
-      if(show){
-        if(obj.modelLoaded){model.setAttribute('visible','true');box.setAttribute('visible','false');}
-        else{box.setAttribute('visible','true');}
-      } else {
-        model.setAttribute('visible','false');box.setAttribute('visible','false');
-      }
+      var m=document.getElementById('model-'+idx), b=document.getElementById('box-'+idx);
+      if(show){ if(obj.modelLoaded){m.setAttribute('visible','true');b.setAttribute('visible','false');}
+                else{b.setAttribute('visible','true');} }
+      else{ m.setAttribute('visible','false'); b.setAttribute('visible','false'); }
     }
 
-    /* ── Laddning: CSV + markörbilden ── */
+    /* ── Laddning: config + CSV + markörbilder ── */
     Promise.all([
       fetch('config.json').then(function(r){if(!r.ok)throw new Error('config.json saknas');return r.json();}),
-      fetch('assets/placements.csv').then(function(r){if(!r.ok)throw new Error('placements.csv saknas');return r.text();}),
-      fetch(MARKER_FILE).then(function(r){
-        if(!r.ok) throw new Error(
-          'Markörbilden saknas: ' + MARKER_FILE + '\n\n' +
-          'Ladda upp den utskrivna ArUco-bilden (PNG) till assets/markers/ med namnet ankar.png.'
-        );
-        return r.blob();
-      }).then(function(blob){ return createImageBitmap(blob); })
+      fetch('assets/placements.csv').then(function(r){if(!r.ok)throw new Error('placements.csv saknas');return r.text();})
     ]).then(function(results) {
-      modelDefaults    = results[0].modelDefaults || {};
-      var parsed       = parseCSV(results[1]);
-      markerImageBitmap = results[2];
+      modelDefaults = results[0].modelDefaults || {};
+      var parsed    = parseCSV(results[1]);
 
       anchor = parsed.objectRows.find(function(r){ return r.namn.toUpperCase()==='ANKAR'; });
       if(!anchor){ showError('Ingen ANKAR-rad i placements.csv.'); return; }
 
+      /* PNG-rader = markörbilder */
+      markerRows = parsed.objectRows.filter(function(r){
+        return r.namn.toUpperCase()!=='ANKAR' && r.namn.toLowerCase().endsWith('.png');
+      });
+
+      /* GLB-rader = 3D-objekt */
       placedObjects = parsed.objectRows
-        .filter(function(r){ return r.namn.toUpperCase()!=='ANKAR'; })
+        .filter(function(r){ return r.namn.toUpperCase()!=='ANKAR' && !r.namn.toLowerCase().endsWith('.png'); })
         .map(function(r){ r.offset=surveyOffset(anchor,r.lat,r.lon,r.elev); return r; });
 
       barriers = buildBarriers(parsed.sparrRows);
@@ -356,28 +352,44 @@
       loadStatus.textContent = placedObjects.length + ' objekt laddade ✓';
       loadStatus.className   = 'status-row ready';
 
-      imageStatus.classList.remove('hidden');
-      imageStatus.textContent = 'Markörbilden laddad ✓';
-      imageStatus.className   = 'status-row ready';
+      if(markerRows.length === 0){
+        showError('Inga markörbilder (PNG) hittades i placements.csv.\nLägg till rader med .png och ladda upp bilderna till assets/markers/.');
+        return;
+      }
 
-      compassStatus.classList.remove('hidden');
+      imageStatus.classList.remove('hidden');
+      imageStatus.textContent = 'Laddar ' + markerRows.length + ' markörbilder...';
+
       buildScene();
+
+      /* Ladda alla markörbilder parallellt */
+      var imagePromises = markerRows.map(function(row){
+        return fetch(MARKER_FOLDER + row.namn)
+          .then(function(r){
+            if(!r.ok) throw new Error(
+              row.namn + ' saknas i assets/markers/\n' +
+              'Ladda upp den utskrivna ArUco-bilden dit.'
+            );
+            return r.blob();
+          })
+          .then(function(blob){ return createImageBitmap(blob); });
+      });
+
+      return Promise.all(imagePromises);
+    }).then(function(bitmaps){
+      if(!bitmaps) return;
+      markerBitmaps = bitmaps;
+      imageStatus.textContent = markerRows.length + ' markörbilder laddade ✓';
+      imageStatus.className   = 'status-row ready';
+      compassStatus.classList.remove('hidden');
       checkWebXR();
     }).catch(function(err){ showError(err.message); });
 
-    /* ── WebXR med image-tracking ── */
+    /* ── WebXR ── */
     function checkWebXR() {
       if(!navigator.xr){ showError('Webbläsaren saknar WebXR.'); return; }
       navigator.xr.isSessionSupported('immersive-ar').then(function(ok){
-        if(!ok){ showError('WebXR AR stöds inte.'); return; }
-
-        /* Kontrollera om image-tracking stöds */
-        if(navigator.xr.isSessionSupported && typeof XRImageTrackingResult !== 'undefined') {
-          trackingSupport.classList.remove('hidden');
-          trackingSupport.textContent = 'Bildspårning stöds ✓';
-          trackingSupport.className   = 'status-row ready';
-        }
-
+        if(!ok){ showError('WebXR AR stöds inte. Kräver Chrome + Android + ARCore.'); return; }
         startBtn.classList.add('enabled');
       });
     }
@@ -385,44 +397,39 @@
     /* ── Starta AR med image-tracking ── */
     startBtn.addEventListener('click', async function() {
       startBtn.classList.remove('enabled');
+
+      /* Kompassrotation på scene-root */
+      if(compassHeading !== null){
+        sceneRoot.setAttribute('rotation','0 '+(-compassHeading).toFixed(1)+' 0');
+      }
+
       try {
-        /* Begär session med image-tracking */
-        xrSession = await navigator.xr.requestSession('immersive-ar', {
+        var session = await navigator.xr.requestSession('immersive-ar', {
           requiredFeatures: ['local-floor'],
-          optionalFeatures: ['image-tracking', 'dom-overlay'],
-          trackedImages: [{
-            image: markerImageBitmap,
-            widthInMeters: MARKER_SIZE_M
-          }],
+          optionalFeatures: ['image-tracking','dom-overlay'],
+          trackedImages: markerBitmaps.map(function(bm){
+            return { image: bm, widthInMeters: MARKER_SIZE_M };
+          }),
           domOverlay: { root: uiOverlay }
         });
 
-        xrSession.addEventListener('end', function(){
+        session.addEventListener('end', function(){
           clearInterval(visTimer);
           window.location.href = 'index.html';
         });
 
-        /* Överlämna sessionen till A-Frames renderer */
         var renderer = scene.renderer;
         renderer.xr.enabled = true;
-        await renderer.xr.setSession(xrSession);
-
-        /* Kompassrotation */
-        if(compassHeading !== null) {
-          sceneRoot.setAttribute('rotation', '0 ' + (-compassHeading).toFixed(1) + ' 0');
-        }
+        await renderer.xr.setSession(session);
 
         startScreen.style.display = 'none';
         uiOverlay.classList.remove('hidden');
-        placedObjects.forEach(function(obj){ obj.arActive = true; });
+        placedObjects.forEach(function(obj){ obj.arActive=true; });
         visTimer = setInterval(updateVisibility, VISIBILITY_HZ);
 
       } catch(e) {
-        /* Fallback: starta utan image-tracking om det inte stöds */
-        console.warn('Image-tracking misslyckades, startar utan:', e.message);
-        if(compassHeading !== null) {
-          sceneRoot.setAttribute('rotation', '0 ' + (-compassHeading).toFixed(1) + ' 0');
-        }
+        /* Fallback utan image-tracking */
+        console.warn('Image-tracking fel – startar utan:', e.message);
         markerLabel.textContent = 'Bildspårning ej tillgänglig – kompassläge';
         scene.enterAR();
       }
@@ -430,22 +437,19 @@
 
     exitBtn.addEventListener('click', function(){ scene.exitVR(); });
 
-    /* Fallback om scene.enterAR() används (t.ex. vid image-tracking-fel) */
     scene.addEventListener('enter-vr', function(){
-      startScreen.style.display='none';
-      uiOverlay.classList.remove('hidden');
+      startScreen.style.display='none'; uiOverlay.classList.remove('hidden');
       placedObjects.forEach(function(obj){ obj.arActive=true; });
       if(!visTimer) visTimer=setInterval(updateVisibility,VISIBILITY_HZ);
     });
 
     scene.addEventListener('exit-vr', function(){
-      clearInterval(visTimer);
-      window.location.href='index.html';
+      clearInterval(visTimer); window.location.href='index.html';
     });
 
-    function showError(msg) {
+    function showError(msg){
       startScreen.classList.add('hidden');
-      document.getElementById('error-message').textContent = msg;
+      document.getElementById('error-message').textContent=msg;
       errorOverlay.classList.remove('hidden');
     }
   </script>

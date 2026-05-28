@@ -303,7 +303,7 @@
       if (!anchor) { showError('Ingen ANKAR-rad i placements.csv.'); return; }
 
       placedObjects = parsed.objectRows
-        .filter(function (r) { return r.namn.toUpperCase() !== 'ANKAR'; })
+        .filter(function (r) { return r.namn.toUpperCase() !== 'ANKAR' && !r.namn.toLowerCase().endsWith('.png'); })
         .map(function (r) { r.offset = surveyOffset(anchor, r.lat, r.lon, r.elev); return r; });
 
       barriers = buildBarriers(parsed.sparrRows);
