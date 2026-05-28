@@ -35,6 +35,21 @@
     }
     #start-ar-btn.enabled { opacity: 1; pointer-events: all; }
     #back-start { color: #aaa; text-decoration: none; font-size: 0.9rem; }
+    #compass-cal-btn {
+      background: none; border: 1px solid rgba(255,255,255,0.25); color: #9999bb;
+      font-size: 0.8rem; padding: 6px 14px; border-radius: 8px; cursor: pointer;
+    }
+    #cal-overlay {
+      position: fixed; inset: 0; background: rgba(10,10,30,0.97); color: #fff;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 20px; z-index: 99999;
+      padding: 32px; text-align: center; font-family: sans-serif;
+    }
+    #cal-heading { font-size: 5rem; font-weight: bold; line-height: 1; }
+    #cal-close {
+      padding: 12px 32px; font-size: 1rem; font-weight: bold;
+      border: none; border-radius: 10px; background: #c0392b; color: #fff; cursor: pointer;
+    }
     #ui-overlay {
       position: fixed; top: 0; left: 0; right: 0;
       display: flex; flex-direction: column; align-items: center;
@@ -74,8 +89,20 @@
     <div id="load-status"    class="status-row warn">Laddar placements.csv...</div>
     <div id="image-status"   class="status-row warn hidden">Laddar markörbilder...</div>
     <div id="compass-status" class="status-row warn hidden">Söker kompass...</div>
+    <button id="compass-cal-btn" class="hidden">Kalibrera kompass ⊕</button>
     <button id="start-ar-btn">Starta AR</button>
     <a href="index.html" id="back-start">&#8592; Tillbaka</a>
+  </div>
+
+  <div id="cal-overlay" class="hidden">
+    <div style="font-size:1.2rem;font-weight:bold;">Kompasskalibrering</div>
+    <div id="cal-heading">–°</div>
+    <div id="cal-stability" class="status-row warn">Mäter...</div>
+    <div style="font-size:0.9rem;color:#9999bb;max-width:280px;line-height:1.6;">
+      Rör telefonen i en <strong>∞-rörelse</strong> (liggande åtta).<br>
+      Håll telefonen upprätt som om du läser – inte plant.
+    </div>
+    <button id="cal-close">Klar ✓</button>
   </div>
 
   <div id="error-overlay" class="hidden">
@@ -143,6 +170,7 @@
         compassHeading = e.alpha;
         compassStatus.textContent = 'Kompass: ' + Math.round(compassHeading) + '° ✓';
         compassStatus.className   = 'status-row ready';
+        document.getElementById('compass-cal-btn').classList.remove('hidden');
       }
     });
     window.addEventListener('deviceorientation', function (e) {
@@ -150,7 +178,33 @@
         compassHeading = e.alpha;
         compassStatus.textContent = 'Kompass (relativ): ' + Math.round(compassHeading) + '°';
         compassStatus.className   = 'status-row warn';
+        document.getElementById('compass-cal-btn').classList.remove('hidden');
       }
+    });
+
+    /* ── Kompasskalibrering ── */
+    var calReadings = [], calTimer = null;
+    document.getElementById('compass-cal-btn').addEventListener('click', function () {
+      document.getElementById('cal-overlay').classList.remove('hidden');
+      calReadings = [];
+      calTimer = setInterval(function () {
+        if (compassHeading === null) return;
+        calReadings.push(compassHeading);
+        if (calReadings.length > 20) calReadings.shift();
+        document.getElementById('cal-heading').textContent = Math.round(compassHeading) + '°';
+        if (calReadings.length < 5) return;
+        var mean = calReadings.reduce(function (a, b) { return a + b; }, 0) / calReadings.length;
+        var std  = Math.sqrt(calReadings.reduce(function (s, v) {
+          return s + (v - mean) * (v - mean); }, 0) / calReadings.length);
+        var el = document.getElementById('cal-stability');
+        if (std < 3)       { el.textContent = 'Stabil ±' + std.toFixed(1) + '° ✓';         el.className = 'status-row ready'; }
+        else if (std < 10) { el.textContent = 'Kalibrerar... ±' + std.toFixed(1) + '°';     el.className = 'status-row warn'; }
+        else               { el.textContent = 'Rör i ∞-rörelse ±' + std.toFixed(1) + '°';  el.className = 'status-row error'; }
+      }, 150);
+    });
+    document.getElementById('cal-close').addEventListener('click', function () {
+      document.getElementById('cal-overlay').classList.add('hidden');
+      clearInterval(calTimer);
     });
 
     /* ── A-Frame system: läser image-tracking varje frame ── */
