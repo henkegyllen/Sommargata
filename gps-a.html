@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>Sommargatan – Ren GPS</title>
+  <title>Sommargatan – Metod A: Stå vid markören</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <link rel="stylesheet" href="css/ui.css">
   <style>
@@ -17,7 +17,7 @@
     }
     #start-screen h2 { margin: 0; font-size: 1.4rem; }
     #start-screen .method-badge {
-      background: #2a6b4a; color: #fff; font-size: 0.8rem;
+      background: #7b4a9a; color: #fff; font-size: 0.8rem;
       padding: 4px 12px; border-radius: 20px; letter-spacing: 0.5px;
     }
     #start-screen .method-desc {
@@ -32,7 +32,7 @@
     .status-row.error { color: #ff6b6b; }
     #start-ar-btn {
       padding: 14px 36px; font-size: 1.1rem; font-weight: bold;
-      border: none; border-radius: 10px; background: #2a6b4a; color: #fff;
+      border: none; border-radius: 10px; background: #7b4a9a; color: #fff;
       cursor: pointer; opacity: 0.4; pointer-events: none; transition: opacity 0.3s;
     }
     #start-ar-btn.enabled { opacity: 1; pointer-events: all; }
@@ -64,16 +64,19 @@
 <body>
 
   <div id="start-screen">
-    <span class="method-badge">METOD: REN GPS</span>
+    <span class="method-badge">METOD A: STÅ VID MARKÖREN</span>
     <h2>Sommargatan AR</h2>
     <p class="method-desc">
-      GPS-korrigerad placering med kompass. Stå nära ankarpunkten – GPS-felet
-      (±3–15 m) kompenseras automatiskt.
+      Gå till <strong>ArUco-markören</strong> (ankarpunkten). Stå exakt vid den
+      och tryck Starta AR. Inga GPS-fel – du är origo.
     </p>
-    <div id="load-status"  class="status-row warn">Laddar placements.csv...</div>
-    <div id="gps-status"   class="status-row warn hidden">Söker GPS...</div>
+    <div id="load-status"    class="status-row warn">Laddar placements.csv...</div>
+    <div id="gps-status"     class="status-row warn hidden">Söker GPS (vägledning)...</div>
     <div id="compass-status" class="status-row warn hidden">Söker kompass...</div>
-    <div id="anchor-dist"  class="status-row hidden"></div>
+    <div id="anchor-dist"    class="status-row hidden"></div>
+    <div id="at-marker-hint" class="status-row warn hidden">
+      Gå till ArUco-markören och tryck Starta AR
+    </div>
     <button id="start-ar-btn">Starta AR</button>
     <a href="index.html" id="back-start">&#8592; Tillbaka</a>
   </div>
@@ -86,7 +89,7 @@
 
   <div id="ui-overlay" class="hidden">
     <button id="exit-ar-btn">&#10005; Avsluta AR</button>
-    <div id="acc-label"></div>
+    <div id="acc-label">Metod A</div>
   </div>
 
   <a-scene
@@ -101,32 +104,29 @@
   </a-scene>
 
   <script>
-    var MAX_GPS_ACC   = 15;
     var VISIBILITY_HZ = 100;
 
-    var anchor             = null;
-    var placedObjects      = [];
-    var barriers           = [];
-    var modelDefaults      = {};
-    var lastGoodPos        = null;
-    var lastAcc            = null;
-    var visTimer           = null;
-    var compassHeading     = null;
-    var compensationDone   = false;
+    var anchor        = null;
+    var placedObjects = [];
+    var barriers      = [];
+    var modelDefaults = {};
+    var lastAcc       = null;
+    var visTimer      = null;
+    var compassHeading = null;
 
-    var startScreen   = document.getElementById('start-screen');
-    var errorOverlay  = document.getElementById('error-overlay');
-    var uiOverlay     = document.getElementById('ui-overlay');
-    var loadStatus    = document.getElementById('load-status');
-    var gpsStatus     = document.getElementById('gps-status');
-    var compassStatus = document.getElementById('compass-status');
-    var anchorDist    = document.getElementById('anchor-dist');
-    var startBtn      = document.getElementById('start-ar-btn');
-    var exitBtn       = document.getElementById('exit-ar-btn');
-    var accLabel      = document.getElementById('acc-label');
-    var scene         = document.getElementById('ar-scene');
-    var assets        = document.getElementById('asset-manager');
-    var sceneRoot     = document.getElementById('scene-root');
+    var startScreen    = document.getElementById('start-screen');
+    var errorOverlay   = document.getElementById('error-overlay');
+    var uiOverlay      = document.getElementById('ui-overlay');
+    var loadStatus     = document.getElementById('load-status');
+    var gpsStatus      = document.getElementById('gps-status');
+    var compassStatus  = document.getElementById('compass-status');
+    var anchorDist     = document.getElementById('anchor-dist');
+    var atMarkerHint   = document.getElementById('at-marker-hint');
+    var startBtn       = document.getElementById('start-ar-btn');
+    var exitBtn        = document.getElementById('exit-ar-btn');
+    var scene          = document.getElementById('ar-scene');
+    var assets         = document.getElementById('asset-manager');
+    var sceneRoot      = document.getElementById('scene-root');
 
     /* ── Kompass ── */
     window.addEventListener('deviceorientationabsolute', function (e) {
@@ -136,7 +136,6 @@
         compassStatus.className   = 'status-row ready';
       }
     });
-    /* Fallback – inte absolut men bättre än inget */
     window.addEventListener('deviceorientation', function (e) {
       if (compassHeading === null && e.alpha !== null) {
         compassHeading = e.alpha;
@@ -175,7 +174,6 @@
       return s.split(/\s+/).length === 1 ? s + ' ' + s + ' ' + s : s;
     }
 
-    /* ── Geodetisk offset ankar → punkt (meter) ── */
     function surveyOffset(anc, lat, lon, elev) {
       var R = 6378137;
       var dLat = (lat - anc.lat) * Math.PI / 180;
@@ -198,14 +196,11 @@
 
     function getScale(obj) {
       if (obj.csvScale) return obj.csvScale;
-      if (modelDefaults[obj.namn] && modelDefaults[obj.namn].scale)
-        return modelDefaults[obj.namn].scale;
+      if (modelDefaults[obj.namn] && modelDefaults[obj.namn].scale) return modelDefaults[obj.namn].scale;
       return '1 1 1';
     }
 
-    function posStr(x, y, z) {
-      return x.toFixed(3) + ' ' + y.toFixed(3) + ' ' + z.toFixed(3);
-    }
+    function posStr(x, y, z) { return x.toFixed(3) + ' ' + y.toFixed(3) + ' ' + z.toFixed(3); }
 
     function distToAnchor(lat, lon) {
       if (!anchor) return null;
@@ -213,7 +208,7 @@
       return Math.sqrt(off.x * off.x + off.z * off.z);
     }
 
-    /* ── Bygg A-Frame-entiteter ── */
+    /* ── Bygg scen ── */
     function buildScene() {
       placedObjects.forEach(function (obj, idx) {
         var off     = obj.offset;
@@ -226,7 +221,7 @@
 
         var box = document.createElement('a-box');
         box.setAttribute('id',       'box-' + idx);
-        box.setAttribute('color',    '#4a90d9');
+        box.setAttribute('color',    '#9b59b6');
         box.setAttribute('opacity',  '0.85');
         box.setAttribute('position', posStr(off.x, off.y + 0.5, off.z));
         box.setAttribute('visible',  'false');
@@ -251,13 +246,12 @@
 
     /* ── Synlighet ── */
     function segmentsIntersect(p1x, p1z, p2x, p2z, p3x, p3z, p4x, p4z) {
-      var d1x = p2x-p1x, d1z = p2z-p1z, d2x = p4x-p3x, d2z = p4z-p3z;
+      var d1x=p2x-p1x, d1z=p2z-p1z, d2x=p4x-p3x, d2z=p4z-p3z;
       var cross = d1x*d2z - d1z*d2x;
       if (Math.abs(cross) < 1e-10) return false;
-      var dx = p3x-p1x, dz = p3z-p1z;
-      var t = (dx*d2z - dz*d2x) / cross;
-      var u = (dx*d1z - dz*d1x) / cross;
-      return t > 0 && t < 1 && u > 0 && u < 1;
+      var dx=p3x-p1x, dz=p3z-p1z;
+      var t = (dx*d2z-dz*d2x)/cross, u = (dx*d1z-dz*d1x)/cross;
+      return t>0 && t<1 && u>0 && u<1;
     }
 
     function updateVisibility() {
@@ -276,19 +270,19 @@
     function checkVisible(camPos, obj) {
       var off = obj.offset;
       if (obj.synligInom !== null) {
-        var dx = camPos.x - off.x, dz = camPos.z - off.z;
-        if (Math.sqrt(dx*dx + dz*dz) > obj.synligInom) return false;
+        var dx = camPos.x-off.x, dz = camPos.z-off.z;
+        if (Math.sqrt(dx*dx+dz*dz) > obj.synligInom) return false;
       }
       for (var i = 0; i < barriers.length; i++) {
         var b = barriers[i];
-        if (segmentsIntersect(camPos.x, camPos.z, off.x, off.z, b.ax, b.az, b.bx, b.bz)) return false;
+        if (segmentsIntersect(camPos.x,camPos.z,off.x,off.z,b.ax,b.az,b.bx,b.bz)) return false;
       }
       return true;
     }
 
     function applyVisibility(idx, obj, show) {
-      var model = document.getElementById('model-' + idx);
-      var box   = document.getElementById('box-'   + idx);
+      var model = document.getElementById('model-'+idx);
+      var box   = document.getElementById('box-'+idx);
       if (show) {
         if (obj.modelLoaded) { model.setAttribute('visible','true'); box.setAttribute('visible','false'); }
         else                 { box.setAttribute('visible','true'); }
@@ -299,17 +293,11 @@
 
     /* ── Laddning ── */
     Promise.all([
-      fetch('config.json').then(function (r) {
-        if (!r.ok) throw new Error('config.json saknas');
-        return r.json();
-      }),
-      fetch('assets/placements.csv').then(function (r) {
-        if (!r.ok) throw new Error('placements.csv saknas');
-        return r.text();
-      })
+      fetch('config.json').then(function (r) { if (!r.ok) throw new Error('config.json saknas'); return r.json(); }),
+      fetch('assets/placements.csv').then(function (r) { if (!r.ok) throw new Error('placements.csv saknas'); return r.text(); })
     ]).then(function (results) {
       modelDefaults = results[0].modelDefaults || {};
-      var parsed    = parseCSV(results[1]);
+      var parsed = parseCSV(results[1]);
 
       anchor = parsed.objectRows.find(function (r) { return r.namn.toUpperCase() === 'ANKAR'; });
       if (!anchor) { showError('Ingen ANKAR-rad i placements.csv.'); return; }
@@ -321,7 +309,6 @@
       barriers = buildBarriers(parsed.sparrRows);
 
       var info = placedObjects.length + ' objekt';
-      if (barriers.length) info += ', ' + barriers.length + ' barriär' + (barriers.length > 1 ? 'er' : '');
       loadStatus.textContent = info + ' laddade ✓';
       loadStatus.className   = 'status-row ready';
 
@@ -329,72 +316,52 @@
       checkWebXR();
     }).catch(function (err) { showError('Laddningsfel: ' + err.message); });
 
-    /* ── WebXR-kontroll ── */
+    /* ── WebXR ── */
     function checkWebXR() {
-      if (!navigator.xr) { showError('Webbläsaren saknar WebXR. Prova Chrome på Android.'); return; }
+      if (!navigator.xr) { showError('Webbläsaren saknar WebXR.'); return; }
       navigator.xr.isSessionSupported('immersive-ar').then(function (ok) {
         if (!ok) { showError('WebXR AR stöds inte. Kräver Chrome + Android + ARCore.'); }
         else {
           gpsStatus.classList.remove('hidden');
           compassStatus.classList.remove('hidden');
           startGPS();
+          /* Metod A: knappen aktiveras direkt (GPS är bara vägledning) */
+          startBtn.classList.add('enabled');
+          atMarkerHint.classList.remove('hidden');
         }
       });
     }
 
-    /* ── GPS ── */
+    /* ── GPS (vägledning) ── */
     function startGPS() {
-      if (!navigator.geolocation) { showError('Enheten saknar GPS.'); return; }
+      if (!navigator.geolocation) return;
       navigator.geolocation.watchPosition(
         function (pos) {
           var acc = Math.round(pos.coords.accuracy);
           lastAcc = acc;
-          if (acc <= MAX_GPS_ACC) {
-            lastGoodPos = pos.coords;
-            gpsStatus.textContent = 'GPS ±' + acc + ' m ✓';
-            gpsStatus.className   = 'status-row ready';
-            startBtn.classList.add('enabled');
-          } else {
-            gpsStatus.textContent = 'GPS söker... ±' + acc + ' m';
-            gpsStatus.className   = 'status-row warn';
-          }
+          gpsStatus.textContent = 'GPS ±' + acc + ' m (vägledning)';
+          gpsStatus.className   = acc <= 15 ? 'status-row ready' : 'status-row warn';
           if (anchor) {
             var d = distToAnchor(pos.coords.latitude, pos.coords.longitude);
             anchorDist.classList.remove('hidden');
             anchorDist.textContent = 'Avstånd till ankare: ' + Math.round(d) + ' m';
-            anchorDist.className   = 'status-row ' + (d < 10 ? 'ready' : d < 50 ? 'warn' : 'error');
+            anchorDist.className   = 'status-row ' + (d < 3 ? 'ready' : d < 15 ? 'warn' : 'error');
+            if (d < 3) {
+              atMarkerHint.textContent = 'Du är vid markören! Tryck Starta AR.';
+              atMarkerHint.className   = 'status-row ready';
+            }
           }
         },
-        function () { showError('GPS nekades. Tillåt platsdelning i Chrome-inställningarna.'); },
+        function () {},
         { enableHighAccuracy: true }
       );
     }
 
     /* ── Knappar ── */
     startBtn.addEventListener('click', function () {
-      if (!lastGoodPos) return;
-      if (!compensationDone) {
-        compensationDone = true;
-
-        /* GPS-kompensation: flytta alla objekt med (användar-GPS - ankare) */
-        var uOff = surveyOffset(anchor, lastGoodPos.latitude, lastGoodPos.longitude, null);
-        placedObjects.forEach(function (obj, idx) {
-          obj.offset.x -= uOff.x;
-          obj.offset.z -= uOff.z;
-          var m = document.getElementById('model-' + idx);
-          var b = document.getElementById('box-'   + idx);
-          if (m) m.setAttribute('position', posStr(obj.offset.x, obj.offset.y, obj.offset.z));
-          if (b) b.setAttribute('position', posStr(obj.offset.x, obj.offset.y + 0.5, obj.offset.z));
-        });
-        barriers.forEach(function (bar) {
-          bar.ax -= uOff.x; bar.az -= uOff.z;
-          bar.bx -= uOff.x; bar.bz -= uOff.z;
-        });
-
-        /* Kompassrotation: vrid hela scenen så nord pekar rätt */
-        if (compassHeading !== null) {
-          sceneRoot.setAttribute('rotation', '0 ' + (-compassHeading).toFixed(1) + ' 0');
-        }
+      /* Metod A: inga GPS-korrigeringar – användaren ÄR ankaret (origo) */
+      if (compassHeading !== null) {
+        sceneRoot.setAttribute('rotation', '0 ' + (-compassHeading).toFixed(1) + ' 0');
       }
       scene.enterAR();
     });
@@ -404,7 +371,6 @@
     scene.addEventListener('enter-vr', function () {
       startScreen.style.display = 'none';
       uiOverlay.classList.remove('hidden');
-      if (lastAcc !== null) accLabel.textContent = 'GPS ±' + lastAcc + ' m';
       placedObjects.forEach(function (obj) { obj.arActive = true; });
       visTimer = setInterval(updateVisibility, VISIBILITY_HZ);
     });
