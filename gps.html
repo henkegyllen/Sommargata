@@ -130,7 +130,8 @@
 
   <script>
     var MAX_GPS_ACC   = 15;
-    var VISIBILITY_HZ = 100;
+    var VISIBILITY_HZ   = 100;
+    var DECLINATION_DEG = 5.0;   /* magnetisk deklination Växjö 2026 ≈ 4.5–5° Öst */
 
     var anchor             = null;
     var placedObjects      = [];
@@ -447,7 +448,7 @@
 
         /* Kompassrotation: vrid hela scenen så nord pekar rätt */
         if (compassHeading !== null) {
-          sceneRoot.setAttribute('rotation', '0 ' + (-compassHeading).toFixed(1) + ' 0');
+          sceneRoot.setAttribute('rotation', '0 ' + (DECLINATION_DEG - compassHeading).toFixed(1) + ' 0');
         }
       }
       scene.enterAR();

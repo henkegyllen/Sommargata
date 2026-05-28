@@ -139,7 +139,8 @@
      */
     var MARKER_FOLDER = 'assets/markers/';
     var MARKER_SIZE_M = 0.20;    /* 20 cm – ändra efter faktisk utskrift */
-    var VISIBILITY_HZ = 100;
+    var VISIBILITY_HZ   = 100;
+    var DECLINATION_DEG = 5.0;   /* magnetisk deklination Växjö 2026 ≈ 4.5–5° Öst */
 
     var anchor          = null;
     var placedObjects   = [];
@@ -260,13 +261,13 @@
       var rotY;
       if (markerRow.bearing !== null) {
         var detBearing = getBearingFromPose(pose);
-        rotY = detBearing - markerRow.bearing;
+        rotY = detBearing - markerRow.bearing - DECLINATION_DEG;
         console.log('Marker', markerRow.namn,
           'detBearing', detBearing.toFixed(1),
           'realBearing', markerRow.bearing,
           'rotY', rotY.toFixed(1));
       } else if (compassHeading !== null) {
-        rotY = -compassHeading;
+        rotY = DECLINATION_DEG - compassHeading;
       } else {
         rotY = 0;
       }
@@ -481,7 +482,7 @@
 
       /* Kompassrotation på scene-root */
       if(compassHeading !== null){
-        sceneRoot.setAttribute('rotation','0 '+(-compassHeading).toFixed(1)+' 0');
+        sceneRoot.setAttribute('rotation','0 '+(DECLINATION_DEG - compassHeading).toFixed(1)+' 0');
       }
 
       try {
