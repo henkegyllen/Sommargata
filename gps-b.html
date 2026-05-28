@@ -419,10 +419,9 @@
       anchor = parsed.objectRows.find(function(r){ return r.namn.toUpperCase()==='ANKAR'; });
       if(!anchor){ showError('Ingen ANKAR-rad i placements.csv.'); return; }
 
-      /* PNG-rader = markörbilder */
-      markerRows = parsed.objectRows.filter(function(r){
-        return r.namn.toUpperCase()!=='ANKAR' && r.namn.toLowerCase().endsWith('.png');
-      });
+      /* Ankar-markör för bildspårning – temporärt Bild_11, byt till dedikerad ArUco vid behov */
+      var ANCHOR_MARKER = 'Bild_11.png';
+      markerRows = parsed.objectRows.filter(function(r){ return r.namn === ANCHOR_MARKER; });
 
       /* GLB-rader = 3D-objekt */
       placedObjects = parsed.objectRows
