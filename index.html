@@ -45,6 +45,7 @@
     .btn-gps  { background: #2a6b4a; }
     .btn-a    { background: #7b4a9a; }
     .btn-b    { background: #c0392b; }
+    .btn-c    { background: #1a6b8a; }
     .divider {
       width: 100%;
       max-width: 360px;
@@ -83,16 +84,22 @@
 
       <a href="gps-b.html" class="method-btn btn-b">
         <span class="badge">METOD B</span>
-        <span class="title">Bildspårning (kamera)</span>
-        <span class="desc">Kameran hittar ArUco-markören automatiskt och snäpper positionen. Kräver ankar.png i assets/markers/.</span>
+        <span class="title">Bildspårning (ARCore)</span>
+        <span class="desc">Kameran hittar ArUco-markören automatiskt och snäpper positionen till cm-noggrannhet. Kräver Chrome + ARCore.</span>
+      </a>
+
+      <a href="gps-c.html" class="method-btn btn-c">
+        <span class="badge">METOD C</span>
+        <span class="title">Korsplattform (iOS + Android)</span>
+        <span class="desc">Fungerar utan ARCore. ArUco-markören korrigerar riktningen via kameran – inga ARCore-krav.</span>
       </a>
     </div>
 
     <hr class="divider">
 
     <p class="browser-note">
-      Fungerar i <strong>Chrome</strong> (Android) med ARCore.<br>
-      Andra webbläsare stöds ej.
+      Metod A–C: <strong>Chrome</strong> (Android) eller <strong>Safari</strong> (iOS).<br>
+      Metod B kräver ARCore.
     </p>
   </main>
 </body>
