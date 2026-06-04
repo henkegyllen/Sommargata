@@ -261,7 +261,12 @@
       var rotY;
       if (markerRow.bearing !== null) {
         var detBearing = getBearingFromPose(pose);
-        rotY = detBearing - markerRow.bearing - DECLINATION_DEG;
+        /* Verklig bäring β ska efter scenrotation θ hamna på AR-bäring β−θ.
+           Normalen detekteras på det ⇒ det = β−θ ⇒ θ = β−det.
+           Ingen deklination här: AR-rymden är kompassoberoende — tidigare
+           formel (det−β−DECL) hade omvänt tecken, vilket gav ett fel på
+           −2·startriktningen (≈90° när man tryckte Start vänd mot NO). */
+        rotY = markerRow.bearing - detBearing;
         console.log('Marker', markerRow.namn,
           'detBearing', detBearing.toFixed(1),
           'realBearing', markerRow.bearing,
