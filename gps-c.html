@@ -175,8 +175,10 @@
      */
     var MARKER_SIZE_M   = 0.50;    /* Skyltens fysiska bredd: piktogrammen är utskrivna 50x50 cm */
     var MARKER_FOLDER   = 'assets/markers/';
-    var PROC_W          = 640;     /* Bearbetningsupplösning */
-    var PROC_H          = 480;
+    var procW          = 640;     /* Bearbetningsupplösning — synkas till videons
+    var procH          = 480;       FAKTISKA mått i tick(). I porträttläge levereras
+                                     480x640; att tvinga in det i 640x480 förvränger
+                                     fyrkanterna och förstör Posit-geometrin. */
     var MAX_GPS_ACC     = 20;
     var VISIBILITY_HZ   = 100;
     var DECLINATION_DEG = -4.4;    /* Deklination Växjö 4.4°E (WMM) – negativt tecken: fälttest visade att korrektionen ska åt andra hållet i deviceorientation-rymden */
@@ -198,8 +200,8 @@
     var cam     = document.getElementById('cam');
     var proc    = document.getElementById('proc');
     var procCtx = proc.getContext('2d');
-    proc.width  = PROC_W;
-    proc.height = PROC_H;
+    proc.width  = procW;
+    proc.height = procH;
 
     var startScreen   = document.getElementById('start-screen');
     var errorOverlay  = document.getElementById('error-overlay');
@@ -374,8 +376,10 @@
     }
 
     function updateVisibility() {
-      var threeCamera = scene.camera; if (!threeCamera) return;
-      var camPos = new THREE.Vector3(); threeCamera.getWorldPosition(camPos);
+      /* Kameran är fixerad i origo i Metod C (ingen translation).
+         scene.camera initieras inte pålitligt i embedded-läge —
+         fälttest visade att hela scenen förblev osynlig p.g.a. det. */
+      var camPos = { x: 0, z: 0 };
       placedObjects.forEach(function (obj, idx) {
         var s = checkVisible(camPos, obj);
         if (s === obj.currentlyVisible) return;
@@ -406,7 +410,7 @@
     /* Posit kräver hörn centrerade kring bildmitten med Y uppåt */
     function centerCorners(corners) {
       return corners.map(function (c) {
-        return { x: c.x - PROC_W / 2, y: PROC_H / 2 - c.y };
+        return { x: c.x - procW / 2, y: procH / 2 - c.y };
       });
     }
 
@@ -468,8 +472,14 @@
       if (arActive && now - lastDetectMs > 100 &&
           cam.readyState >= cam.HAVE_ENOUGH_DATA && PD.isReady()) {
         lastDetectMs = now;
-        procCtx.drawImage(cam, 0, 0, PROC_W, PROC_H);
-        var imageData = procCtx.getImageData(0, 0, PROC_W, PROC_H);
+        /* Synka bearbetningsytan till videons faktiska mått (porträtt: 480x640) */
+        if (cam.videoWidth && proc.width !== cam.videoWidth) {
+          procW = cam.videoWidth; procH = cam.videoHeight;
+          proc.width = procW; proc.height = procH;
+          console.log('Processupplösning:', procW + 'x' + procH);
+        }
+        procCtx.drawImage(cam, 0, 0, procW, procH);
+        var imageData = procCtx.getImageData(0, 0, procW, procH);
         var dets = PD.detect(imageData);
         updateDebugMarkers(dets);
         if (dets.length > 0) {
@@ -480,7 +490,7 @@
         if (!correctionDone && compassHeading !== null && markerRow !== null) {
           for (var i = 0; i < dets.length; i++) {
             if (dets[i].name === markerRow.namn) {
-              var posit = new POS.Posit(MARKER_SIZE_M * 1000, PROC_W);
+              var posit = new POS.Posit(MARKER_SIZE_M * 1000, procW);
               var pose  = posit.pose(centerCorners(dets[i].corners));
               if (pose) { applyMarkerCorrection(pose); break; }
             }
@@ -586,7 +596,7 @@
       /* Starta bakgrundskamera */
       try {
         var stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: { ideal: PROC_W }, height: { ideal: PROC_H } }
+          video: { facingMode: 'environment', width: { ideal: procW }, height: { ideal: procH } }
         });
         cam.srcObject = stream;
       } catch (e) {

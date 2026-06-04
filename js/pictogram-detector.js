@@ -39,9 +39,15 @@ var PD = (function () {
     return (r - g) > 35 && (b - g) > 16;
   }
   function isYellow(r, g, b) {
-    /* Mjuka trösklar: flaggorna hänger ofta i motljus mot himlen
-       (urtvättade färger). Mallmatchningen skyddar mot falska träffar. */
     return (r - b) > 28 && (g - b) > 16 && Math.abs(r - g) < 70;
+  }
+  /* Fälttest 2026-06-04: flaggornas ljusgula bakgrund blir nästan VIT
+     i dagsljus/motljus — kanalskillnaderna försvinner. Ljusa lågmättade
+     ytor räknas därför också som flaggyta. Falska fyrkanter (väggar,
+     skyltar) stoppas av magenta-andelsvakten i matchningen. */
+  function isPale(r, g, b) {
+    var mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    return mn > 110 && (mx - mn) < 55;
   }
 
   function ensureBuffers(w, h) {
@@ -64,7 +70,7 @@ var PD = (function () {
     for (var i = 0; i < n; i++) {
       var r = src[i * 4], g = src[i * 4 + 1], b = src[i * 4 + 2];
       var mag = isMagenta(r, g, b);
-      m[i] = (mag || isYellow(r, g, b)) ? 255 : 0;
+      m[i] = (mag || isYellow(r, g, b) || isPale(r, g, b)) ? 255 : 0;
       q[i] = mag ? 255 : 0;
     }
   }
@@ -91,12 +97,14 @@ var PD = (function () {
     ctx.drawImage(img, 0, 0, GRID, GRID);
     var d = ctx.getImageData(0, 0, GRID, GRID).data;
     var bits = new Uint8Array(GRID * GRID);
+    var magCount = 0;
     for (var i = 0; i < GRID * GRID; i++) {
       bits[i] = isMagenta(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]) ? 1 : 0;
+      magCount += bits[i];
     }
     var rots = [bits];
     for (var r = 1; r < 4; r++) rots.push(rotate90(rots[r - 1]));
-    templates.push({ name: name, rots: rots });
+    templates.push({ name: name, rots: rots, magFrac: magCount / (GRID * GRID) });
   }
 
   return {
@@ -144,7 +152,12 @@ var PD = (function () {
 
         /* Binarisera den warpade magenta-kanalen */
         var bits = new Uint8Array(GRID * GRID);
-        for (var p = 0; p < GRID * GRID; p++) bits[p] = warped.data[p] > 127 ? 1 : 0;
+        var magCount = 0;
+        for (var p = 0; p < GRID * GRID; p++) {
+          bits[p] = warped.data[p] > 127 ? 1 : 0;
+          magCount += bits[p];
+        }
+        var detFrac = magCount / (GRID * GRID);
 
         /* Jämför mot alla mallar × 4 rotationer (rotera detekterade bitarna) */
         var best = null, second = 0;
@@ -152,6 +165,10 @@ var PD = (function () {
         for (var r = 1; r < 4; r++) rotBits.push(rotate90(rotBits[r - 1]));
 
         for (var t = 0; t < templates.length; t++) {
+          /* Magenta-andelsvakt: en vit fyrkant utan piktogram kan annars
+             nå hög "agreement" mot en gles mall. Andelen magenta måste
+             ligga nära mallens. */
+          if (Math.abs(detFrac - templates[t].magFrac) > 0.18) continue;
           for (var rr = 0; rr < 4; rr++) {
             var s = matchScore(rotBits[rr], templates[t].rots[0]);
             if (!best || s > best.score) {
