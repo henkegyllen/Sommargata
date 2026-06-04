@@ -106,7 +106,7 @@
     </p>
     <div id="load-status"    class="status-row warn">Laddar placements.csv...</div>
     <div id="gps-status"     class="status-row warn hidden">Söker GPS...</div>
-    <div id="compass-status" class="status-row warn hidden">Söker kompass...</div>
+    <div id="compass-status" class="status-row warn hidden">Kompass: tillstånd begärs vid start</div>
     <button id="compass-cal-btn" class="hidden">Kalibrera kompass ⊕</button>
     <button id="start-ar-btn">Starta AR</button>
     <a href="index.html" id="back-start">&#8592; Tillbaka</a>
@@ -211,7 +211,7 @@
         compassStatus.textContent = 'Kompass: ' + Math.round(compassHeading) + '° ✓';
         compassStatus.className   = 'status-row ready';
         document.getElementById('compass-cal-btn').classList.remove('hidden');
-        checkReady();
+        applyInitialRotation();
       }
     });
     window.addEventListener('deviceorientation', function (e) {
@@ -220,12 +220,18 @@
         compassStatus.textContent = 'Kompass (relativ): ' + Math.round(compassHeading) + '°';
         compassStatus.className   = 'status-row warn';
         document.getElementById('compass-cal-btn').classList.remove('hidden');
-        checkReady();
+        applyInitialRotation();
       }
     });
 
-    function checkReady() {
-      if (compassHeading !== null) startBtn.classList.add('enabled');
+    /* Engångs-rotation när första kompassvärdet kommer efter AR-start.
+       På iOS levereras deviceorientation först efter tillståndsklicket,
+       så rotationen kan inte alltid sättas direkt vid start. */
+    var initialRotationDone = false;
+    function applyInitialRotation() {
+      if (initialRotationDone || correctionDone || !arActive || compassHeading === null) return;
+      initialRotationDone = true;
+      sceneRoot.setAttribute('rotation', '0 ' + (DECLINATION_DEG - compassHeading).toFixed(1) + ' 0');
     }
 
     /* ── Kompasskalibrering ── */
@@ -466,6 +472,12 @@
       gpsStatus.classList.remove('hidden');
       compassStatus.classList.remove('hidden');
       startGPS();
+
+      /* Aktivera startknappen direkt när datat är laddat.
+         Kompassen kan INTE krävas här: på iOS levereras inga
+         deviceorientation-händelser förrän tillstånd begärts,
+         och tillstånd kan bara begäras i ett klick (moment 22). */
+      startBtn.classList.add('enabled');
     }).catch(function (err) { showError('Laddningsfel: ' + err.message); });
 
     /* ── GPS (frivilligt – förbättrar initial position) ── */
@@ -537,14 +549,13 @@
         });
       }
 
-      /* Initial kompassrotation */
-      if (compassHeading !== null) {
-        sceneRoot.setAttribute('rotation', '0 ' + (DECLINATION_DEG - compassHeading).toFixed(1) + ' 0');
-      }
-
       /* Initiera ArUco-detektor */
       detector = new AR.Detector();
       arActive = true;
+
+      /* Initial kompassrotation – direkt om kompassen redan levererar (Android),
+         annars vid första händelsen efter tillståndet (iOS) */
+      applyInitialRotation();
 
       startScreen.style.display = 'none';
       uiOverlay.classList.remove('hidden');
