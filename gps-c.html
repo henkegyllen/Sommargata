@@ -216,6 +216,7 @@
     var scene         = document.getElementById('ar-scene');
     var assets        = document.getElementById('asset-manager');
     var sceneRoot     = document.getElementById('scene-root');
+    var camEl         = document.querySelector('a-camera');
 
     /* Felskyddsnät: visa krascher i async-kod på skärmen istället för tyst frysning */
     window.addEventListener('unhandledrejection', function (e) {
@@ -445,24 +446,37 @@
       return (cameraWorldBearing + camSpaceBearing + 360) % 360;
     }
 
-    function applyMarkerCorrection(pose) {
+    /*
+     * SIKTLINJEKORREKTION (ersätter normalbaserad bäring 2026-06-04).
+     * Fältdata visade att flaggnormalen ur Posit är opålitlig: +26° fel
+     * frontalt, −83° vid sned vinkel (svajande tyg). Siktlinjen är robust:
+     *   β  = känd bäring användare→flagga (inmätta positioner)
+     *   α  = flaggans horisontella vinkel från kameraaxeln (pixelposition)
+     *   ψ  = kamerans yaw i A-Frame-rymden (look-controls/gyro)
+     *   Scenrotation θ = β + ψ − α   (kompass- och svajoberoende)
+     *   Kamerans sanna riktning = β − α  (loggas mot rå-kompass för kalibrering)
+     */
+    function applyMarkerCorrection(corners) {
       correctionDone = true;
-      var detBearing = getBearingFromPositPose(pose);
-      var rotY       = detBearing - markerRow.bearing - DECLINATION_DEG;
+
+      var m    = surveyOffset(anchor, markerRow.lat, markerRow.lon, null);
+      var beta = (Math.atan2(m.x - userOff.x, -(m.z - userOff.z)) * 180 / Math.PI + 360) % 360;
+
+      var cx    = (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4;
+      var alpha = Math.atan2(cx - procW / 2, procW) * 180 / Math.PI;
+      var psi   = camEl.object3D.rotation.y * 180 / Math.PI;
+
+      var rotY = beta + psi - alpha;
       sceneRoot.setAttribute('rotation', '0 ' + rotY.toFixed(1) + ' 0');
 
-      /* Diagnostik: geometriskt förväntad bäring användare → markör,
-         beräknad ur inmätta positioner. Jämför med detekterad. */
-      var m = surveyOffset(anchor, markerRow.lat, markerRow.lon, null);
-      var expBearing = (Math.atan2(m.x - userOff.x, -(m.z - userOff.z)) * 180 / Math.PI + 360) % 360;
-
-      markerLabel.textContent = markerRow.namn.replace('.png', '') + ' – riktad ✓ · det ' +
-        Math.round(detBearing) + '° · förv ' + Math.round(expBearing) + '°';
+      var camHeading = ((beta - alpha) % 360 + 360) % 360;
+      markerLabel.textContent = markerRow.namn.replace('.png', '') + ' – riktad ✓ · kam ' +
+        Math.round(camHeading) + '° · kompass-α ' + Math.round(compassHeading) + '°';
       markerLabel.className   = 'found';
-      console.log('Skylt', markerRow.namn,
-        'detBearing', detBearing.toFixed(1),
-        'realBearing', markerRow.bearing,
-        'rotY', rotY.toFixed(1));
+      console.log('Siktlinjefix', markerRow.namn,
+        'beta', beta.toFixed(1), 'alpha', alpha.toFixed(1),
+        'psi', psi.toFixed(1), 'rotY', rotY.toFixed(1),
+        'kamHeading', camHeading.toFixed(1), 'råkompass', compassHeading);
     }
 
     /* ── Detektionsloop (10 Hz, stoppar när markör hittad) ── */
@@ -487,12 +501,11 @@
             return d.name + ' (' + (d.score * 100).toFixed(0) + '%)';
           }));
         }
-        if (!correctionDone && compassHeading !== null && markerRow !== null) {
+        if (!correctionDone && markerRow !== null) {
           for (var i = 0; i < dets.length; i++) {
             if (dets[i].name === markerRow.namn) {
-              var posit = new POS.Posit(MARKER_SIZE_M * 1000, procW);
-              var pose  = posit.pose(centerCorners(dets[i].corners));
-              if (pose) { applyMarkerCorrection(pose); break; }
+              applyMarkerCorrection(dets[i].corners);
+              break;
             }
           }
         }
