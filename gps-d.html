@@ -6,8 +6,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Sommargatan – Metod D: Sensorfusion 6DOF</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-  <script src="https://unpkg.com/js-aruco2/src/aruco.js"></script>
-  <script src="https://unpkg.com/js-aruco2/src/posit1.js"></script>
+  <!-- js-aruco2: cv.js MÅSTE laddas före aruco.js, svd.js före posit1.js
+       (annars kraschar de på require() och AR/POS blir odefinierade) -->
+  <script src="https://unpkg.com/js-aruco2@2.0.0/src/cv.js"></script>
+  <script src="https://unpkg.com/js-aruco2@2.0.0/src/aruco.js"></script>
+  <script src="https://unpkg.com/js-aruco2@2.0.0/src/svd.js"></script>
+  <script src="https://unpkg.com/js-aruco2@2.0.0/src/posit1.js"></script>
   <script src="js/sensor-fusion.js"></script>
   <link rel="stylesheet" href="css/ui.css">
   <style>
@@ -226,6 +230,12 @@
     var assets        = document.getElementById('asset-manager');
     var sceneRoot     = document.getElementById('scene-root');
     var arCamera      = document.getElementById('ar-camera');
+
+    /* Felskyddsnät: visa krascher i async-kod på skärmen istället för tyst frysning */
+    window.addEventListener('unhandledrejection', function (e) {
+      var msg = (e.reason && e.reason.message) ? e.reason.message : String(e.reason);
+      showError('Oväntat fel: ' + msg);
+    });
 
     /* ── SensorFusion init ── */
     SensorFusion.init({ declination: DECLINATION_DEG });
@@ -620,7 +630,8 @@
         return;
       }
 
-      detector = new AR.Detector();
+      /* Klassisk ARUCO-ordlista (samma som utskrifterna) */
+      detector = new AR.Detector({ dictionaryName: 'ARUCO' });
       arActive = true;
 
       /* Initial kompassrotation – direkt om kompassen redan levererar (Android),
