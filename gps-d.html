@@ -517,9 +517,15 @@
       sceneRoot.setAttribute('rotation', '0 ' + rotY.toFixed(1) + ' 0');
 
       fixCount++;
+
+      /* Diagnostik: geometriskt förväntad bäring användare → markör */
+      var u = SensorFusion.getPos();
+      var expBearing = (Math.atan2(markerWorldPos.x - u.x, -(markerWorldPos.z - u.z)) * 180 / Math.PI + 360) % 360;
+
       statusLabel.textContent = markerRow.namn.replace('.png','') +
-        ' – fix #' + fixCount +
-        ' (steglängd: ' + SensorFusion.getStepLen().toFixed(2) + ' m)';
+        ' fix #' + fixCount +
+        ' · det ' + Math.round(detBearing) + '° · förv ' + Math.round(expBearing) +
+        '° · steg ' + SensorFusion.getStepLen().toFixed(2) + 'm';
       statusLabel.className = 'found';
 
       console.log('[D] ArUco fix', markerRow.namn,

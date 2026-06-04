@@ -36,10 +36,12 @@ var PD = (function () {
      Gul  RGB(249,225,128): B lägst, R≈G höga.
      Magenta RGB(179,58,132): G lägst, R högst. */
   function isMagenta(r, g, b) {
-    return (r - g) > 40 && (b - g) > 20;
+    return (r - g) > 35 && (b - g) > 16;
   }
   function isYellow(r, g, b) {
-    return (r - b) > 40 && (g - b) > 25 && Math.abs(r - g) < 70;
+    /* Mjuka trösklar: flaggorna hänger ofta i motljus mot himlen
+       (urtvättade färger). Mallmatchningen skyddar mot falska träffar. */
+    return (r - b) > 28 && (g - b) > 16 && Math.abs(r - g) < 70;
   }
 
   function ensureBuffers(w, h) {

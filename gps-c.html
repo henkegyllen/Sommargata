@@ -193,6 +193,7 @@
     var lastGoodPos      = null;
     var compensationDone = false;
     var lastDetectMs     = 0;
+    var userOff          = { x: 0, z: 0 };   /* användarens offset från ankaret (GPS) */
 
     var cam     = document.getElementById('cam');
     var proc    = document.getElementById('proc');
@@ -445,7 +446,14 @@
       var detBearing = getBearingFromPositPose(pose);
       var rotY       = detBearing - markerRow.bearing - DECLINATION_DEG;
       sceneRoot.setAttribute('rotation', '0 ' + rotY.toFixed(1) + ' 0');
-      markerLabel.textContent = markerRow.namn.replace('.png', '') + ' – riktad ✓';
+
+      /* Diagnostik: geometriskt förväntad bäring användare → markör,
+         beräknad ur inmätta positioner. Jämför med detekterad. */
+      var m = surveyOffset(anchor, markerRow.lat, markerRow.lon, null);
+      var expBearing = (Math.atan2(m.x - userOff.x, -(m.z - userOff.z)) * 180 / Math.PI + 360) % 360;
+
+      markerLabel.textContent = markerRow.namn.replace('.png', '') + ' – riktad ✓ · det ' +
+        Math.round(detBearing) + '° · förv ' + Math.round(expBearing) + '°';
       markerLabel.className   = 'found';
       console.log('Skylt', markerRow.namn,
         'detBearing', detBearing.toFixed(1),
@@ -590,6 +598,7 @@
       if (lastGoodPos && !compensationDone) {
         compensationDone = true;
         var uOff = surveyOffset(anchor, lastGoodPos.latitude, lastGoodPos.longitude, null);
+        userOff = { x: uOff.x, z: uOff.z };
         placedObjects.forEach(function (obj, idx) {
           obj.offset.x -= uOff.x;
           obj.offset.z -= uOff.z;
