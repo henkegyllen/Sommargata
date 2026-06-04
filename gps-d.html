@@ -12,6 +12,7 @@
   <script src="https://unpkg.com/js-aruco2@2.0.0/src/aruco.js"></script>
   <script src="https://unpkg.com/js-aruco2@2.0.0/src/svd.js"></script>
   <script src="https://unpkg.com/js-aruco2@2.0.0/src/posit1.js"></script>
+  <script src="js/pictogram-detector.js"></script>
   <script src="js/sensor-fusion.js"></script>
   <link rel="stylesheet" href="css/ui.css">
   <style>
@@ -107,7 +108,7 @@
     <h2>Sommargatan AR</h2>
     <p class="method-desc">
       Stegräkning + kompass spårar din position kontinuerligt.
-      ArUco-markörerna korrigerar position <em>och</em> riktning
+      Skyltarna längs vägen korrigerar position <em>och</em> riktning
       till ±0.5 m noggrannhet. Fungerar på iOS och Android utan ARCore.
     </p>
     <div id="load-status"    class="status-row warn">Laddar placements.csv...</div>
@@ -139,7 +140,7 @@
       <button id="exit-ar-btn">&#10005; Avsluta AR</button>
       <button id="rescan-btn">Rikta om ↺</button>
     </div>
-    <div id="status-label">Rikta kameran mot en ArUco-markör för att kalibrera...</div>
+    <div id="status-label">Rikta kameran mot en skylt för att kalibrera...</div>
   </div>
 
   <a-scene
@@ -182,21 +183,12 @@
     var STEP_COOLDOWN_MS = 300;    /* ms, anti-bounce för stegräknaren */
 
     /*
-     * ArUco-ID per markörposition. Markörerna är de GENERERADE Aruco_XX.png
-     * (klassisk ARUCO-ordlista) — INTE piktogrammen Bild_XX.png som Metod B
-     * spårar. Aruco_XX monteras vid samma inmätta punkt som Bild_XX,
-     * därför mappas CSV-raden Bild_XX.png till ArUco-ID XX.
+     * Skyltdetektion: de monterade skyltarna ÄR piktogrammen Bild_11–18
+     * (magenta på gult, 50x50 cm). PD (pictogram-detector.js) identifierar
+     * vilken skylt kameran ser via färgbaserad mallmatchning mot PNG-filerna
+     * i assets/markers/ — samma filer som skrevs ut.
      */
-    var ARUCO_ID_MAP = {
-      'Bild_11.png': 11,
-      'Bild_12.png': 12,
-      'Bild_13.png': 13,
-      'Bild_14.png': 14,
-      'Bild_15.png': 15,
-      'Bild_16.png': 16,
-      'Bild_17.png': 17,
-      'Bild_18.png': 18
-    };
+    var MARKER_FOLDER = 'assets/markers/';
 
     /* ── State ── */
     var anchor         = null;
@@ -207,7 +199,6 @@
     var visTimer       = null;
     var arActive       = false;
     var stepCooldown   = false;
-    var detector       = null;
     var lastDetectMs   = 0;
     var fixCount       = 0;
     var compassHeading = null;   /* råvärde, hanteras av SensorFusion */
@@ -342,9 +333,8 @@
           var lat=parseFloat(c[1]),lon=parseFloat(c[2]);
           if (isNaN(lat)||isNaN(lon)) return;
           if (nam.toLowerCase().endsWith('.png')) {
-            /* Kolumn 5 = markörbredd i meter (valfri). Default = svarta
-               kvadratens bredd när Aruco_XX.png skrivs ut 50x50 cm. */
-            var markerSize = (c[5] && c[5] !== '') ? parseFloat(c[5]) : 0.389;
+            /* Kolumn 5 = skyltbredd i meter (valfri, default 0.50 = monterad utskrift) */
+            var markerSize = (c[5] && c[5] !== '') ? parseFloat(c[5]) : 0.50;
             objectRows.push({ namn:nam, lat:lat, lon:lon, elev:val(c[3]),
               bearing:val(c[4]), markerSize:markerSize,
               synligInom:null, csvScale:null,
@@ -467,7 +457,14 @@
       else { m.setAttribute('visible','false'); b.setAttribute('visible','false'); }
     }
 
-    /* ── ArUco: bäring + avstånd ur Posit ── */
+    /* Posit kräver hörn centrerade kring bildmitten med Y uppåt */
+    function centerCorners(corners) {
+      return corners.map(function (c) {
+        return { x: c.x - PROC_W / 2, y: PROC_H / 2 - c.y };
+      });
+    }
+
+    /* ── Skylt: bäring + avstånd ur Posit ── */
     function getBearingFromPositPose(pose) {
       var R  = pose.bestRotation;
       var nx = R[0][2], nz = R[2][2];
@@ -524,32 +521,31 @@
         lastDetectMs = now;
         procCtx.drawImage(cam, 0, 0, PROC_W, PROC_H);
         var imageData = procCtx.getImageData(0, 0, PROC_W, PROC_H);
-        var markers   = detector.detect(imageData);
+        var dets = PD.isReady() ? PD.detect(imageData) : [];
 
-        if (markers.length > 0) {
-          console.log('[D] Detekterade ArUco IDs:',
-            markers.map(function (m) { return m.id; }));
+        if (dets.length > 0) {
+          console.log('[D] Skyltar:', dets.map(function (d) {
+            return d.name + ' (' + (d.score * 100).toFixed(0) + '%)';
+          }));
         }
 
-        /* Välj bästa markör: närmast (kortast avstånd) om flera synliga */
-        var bestMarker = null, bestRow = null, bestDist = Infinity;
-        for (var i = 0; i < markers.length; i++) {
-          var m   = markers[i];
-          var row = markerRows.find(function (r) {
-            return ARUCO_ID_MAP[r.namn] === m.id;
-          });
+        /* Välj bästa skylt: närmast (kortast Posit-avstånd) om flera synliga */
+        var bestPose = null, bestRow = null, bestDist = Infinity;
+        for (var i = 0; i < dets.length; i++) {
+          var det = dets[i];
+          var row = markerRows.find(function (r) { return r.namn === det.name; });
           if (!row) continue;
-          var sz    = row.markerSize || 0.389;
+          var sz    = row.markerSize || 0.50;
           var posit = new POS.Posit(sz * 1000, PROC_W);
-          var pose  = posit.pose(m.corners);
+          var pose  = posit.pose(centerCorners(det.corners));
           if (!pose) continue;
-          var t  = pose.bestTranslation;
-          var d  = Math.sqrt(t[0]*t[0] + t[1]*t[1] + t[2]*t[2]);
-          if (d < bestDist) { bestDist = d; bestMarker = pose; bestRow = row; }
+          var t = pose.bestTranslation;
+          var d = Math.sqrt(t[0]*t[0] + t[1]*t[1] + t[2]*t[2]);
+          if (d < bestDist) { bestDist = d; bestPose = pose; bestRow = row; }
         }
 
-        if (bestMarker && bestRow) {
-          applyArUcoFix(bestMarker, bestRow);
+        if (bestPose && bestRow) {
+          applyArUcoFix(bestPose, bestRow);
         }
       }
 
@@ -572,15 +568,20 @@
       if (!anchor) { showError('Ingen ANKAR-rad i placements.csv.'); return; }
 
       markerRows = parsed.objectRows.filter(function (r) {
-        return r.namn.toLowerCase().endsWith('.png') &&
-               ARUCO_ID_MAP.hasOwnProperty(r.namn);
+        return r.namn.toLowerCase().endsWith('.png');
       });
 
       if (markerRows.length === 0) {
-        showError('Inga kända ArUco-markörer hittades i placements.csv.\n' +
-          'Kontrollera ARUCO_ID_MAP-konstanten.');
+        showError('Inga skyltrader (PNG) hittades i placements.csv.');
         return;
       }
+
+      /* Ladda piktogram-mallar för skyltidentifiering */
+      PD.load(markerRows.map(function (r) {
+        return { name: r.namn, url: MARKER_FOLDER + r.namn };
+      }), function (err) {
+        if (err) showError('Mallbild: ' + err);
+      });
 
       placedObjects = parsed.objectRows
         .filter(function (r) {
@@ -633,8 +634,6 @@
         return;
       }
 
-      /* Klassisk ARUCO-ordlista (samma som utskrifterna) */
-      detector = new AR.Detector({ dictionaryName: 'ARUCO' });
       arActive = true;
 
       /* Initial kompassrotation – direkt om kompassen redan levererar (Android),
