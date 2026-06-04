@@ -342,8 +342,9 @@
           var lat=parseFloat(c[1]),lon=parseFloat(c[2]);
           if (isNaN(lat)||isNaN(lon)) return;
           if (nam.toLowerCase().endsWith('.png')) {
-            /* Kolumn 5 = markörbredd i meter (valfri, default 0.20) */
-            var markerSize = (c[5] && c[5] !== '') ? parseFloat(c[5]) : 0.20;
+            /* Kolumn 5 = markörbredd i meter (valfri). Default = svarta
+               kvadratens bredd när Aruco_XX.png skrivs ut 50x50 cm. */
+            var markerSize = (c[5] && c[5] !== '') ? parseFloat(c[5]) : 0.389;
             objectRows.push({ namn:nam, lat:lat, lon:lon, elev:val(c[3]),
               bearing:val(c[4]), markerSize:markerSize,
               synligInom:null, csvScale:null,
@@ -538,7 +539,7 @@
             return ARUCO_ID_MAP[r.namn] === m.id;
           });
           if (!row) continue;
-          var sz    = row.markerSize || 0.20;
+          var sz    = row.markerSize || 0.389;
           var posit = new POS.Posit(sz * 1000, PROC_W);
           var pose  = posit.pose(m.corners);
           if (!pose) continue;
