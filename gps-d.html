@@ -182,18 +182,20 @@
     var STEP_COOLDOWN_MS = 300;    /* ms, anti-bounce för stegräknaren */
 
     /*
-     * ArUco-ID per markör. Verifiera på plats — koden loggar alla detekterade IDs.
-     * Nyckel = filnamn i CSV, värde = ArUco-dictionary-ID.
+     * ArUco-ID per markörposition. Markörerna är de GENERERADE Aruco_XX.png
+     * (klassisk ARUCO-ordlista) — INTE piktogrammen Bild_XX.png som Metod B
+     * spårar. Aruco_XX monteras vid samma inmätta punkt som Bild_XX,
+     * därför mappas CSV-raden Bild_XX.png till ArUco-ID XX.
      */
     var ARUCO_ID_MAP = {
-      'Bild_11.png': 0,
-      'Bild_12.png': 1,
-      'Bild_13.png': 2,
-      'Bild_14.png': 3,
-      'Bild_15.png': 4,
-      'Bild_16.png': 5,
-      'Bild_17.png': 6,
-      'Bild_18.png': 7
+      'Bild_11.png': 11,
+      'Bild_12.png': 12,
+      'Bild_13.png': 13,
+      'Bild_14.png': 14,
+      'Bild_15.png': 15,
+      'Bild_16.png': 16,
+      'Bild_17.png': 17,
+      'Bild_18.png': 18
     };
 
     /* ── State ── */
