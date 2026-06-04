@@ -175,10 +175,11 @@
      */
     var MARKER_SIZE_M   = 0.50;    /* Skyltens fysiska bredd: piktogrammen är utskrivna 50x50 cm */
     var MARKER_FOLDER   = 'assets/markers/';
-    var procW          = 640;     /* Bearbetningsupplösning — synkas till videons
-    var procH          = 480;       FAKTISKA mått i tick(). I porträttläge levereras
-                                     480x640; att tvinga in det i 640x480 förvränger
-                                     fyrkanterna och förstör Posit-geometrin. */
+    /* Bearbetningsupplösning — synkas till videons FAKTISKA mått i tick().
+       I porträttläge levereras 480x640; att tvinga in det i 640x480
+       förvränger fyrkanterna och förstör pose-geometrin. */
+    var procW          = 640;
+    var procH          = 480;
     var MAX_GPS_ACC     = 20;
     var VISIBILITY_HZ   = 100;
     var DECLINATION_DEG = -4.4;    /* Deklination Växjö 4.4°E (WMM) – negativt tecken: fälttest visade att korrektionen ska åt andra hållet i deviceorientation-rymden */
