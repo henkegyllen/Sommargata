@@ -15,7 +15,7 @@
 var SensorFusion = (function () {
 
   /* ── Konfiguration ── */
-  var DECL           = 4.4;    /* magnetisk deklination, grader */
+  var DECL           = -4.4;   /* kompasskorrektion, grader (default – sätts via init; negativt enligt fälttest) */
   var ALPHA          = 0.98;   /* complementary filter — gyroskopvikt */
   var DEFAULT_STEP   = 0.72;   /* m, genomsnittlig steglängd */
   var LERP_DURATION  = 500;    /* ms, tid för mjuk positions-lerp vid ArUco-fix */

@@ -168,7 +168,7 @@
     var PROC_H          = 480;
     var MAX_GPS_ACC     = 20;
     var VISIBILITY_HZ   = 100;
-    var DECLINATION_DEG = 4.4;     /* Magnetisk deklination Växjö 2026 (WMM) */
+    var DECLINATION_DEG = -4.4;    /* Deklination Växjö 4.4°E (WMM) – negativt tecken: fälttest visade att korrektionen ska åt andra hållet i deviceorientation-rymden */
 
     var anchor           = null;
     var markerRow        = null;   /* Bild_11.png-raden från CSV */
