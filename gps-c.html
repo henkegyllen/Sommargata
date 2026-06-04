@@ -501,8 +501,15 @@
       markerRow = parsed.objectRows.find(function (r) { return r.namn === ANCHOR_MARKER; });
       if (!markerRow) { showError(ANCHOR_MARKER + ' saknas i placements.csv.'); return; }
 
-      /* Ladda piktogram-mall för skyltidentifiering */
-      PD.load([{ name: ANCHOR_MARKER, url: MARKER_FOLDER + ANCHOR_MARKER }], function (err) {
+      /* Ladda ALLA skyltmallar – samma mallbas som Metod D så att
+         detektion/HUD beter sig identiskt. Korrektion sker dock
+         fortfarande enbart mot ankarskylten (Bild_11). */
+      var pngRows = parsed.objectRows.filter(function (r) {
+        return r.namn.toLowerCase().endsWith('.png');
+      });
+      PD.load(pngRows.map(function (r) {
+        return { name: r.namn, url: MARKER_FOLDER + r.namn };
+      }), function (err) {
         if (err) showError('Mallbild: ' + err);
       });
 

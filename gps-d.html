@@ -188,6 +188,9 @@
     var VISIBILITY_HZ    = 100;
     var STEP_THRESHOLD   = 1.2;    /* g, accelerometertröskel för stegdetektion */
     var STEP_COOLDOWN_MS = 300;    /* ms, anti-bounce för stegräknaren */
+    var FIX_COOLDOWN_MS  = 5000;   /* ms, minsta tid mellan skyltfixar — annars
+                                      lerpar scenen konstant mot brusiga poser
+                                      och modellen ligger aldrig stilla */
 
     /*
      * Skyltdetektion: de monterade skyltarna ÄR piktogrammen Bild_11–18
@@ -207,6 +210,7 @@
     var arActive       = false;
     var stepCooldown   = false;
     var lastDetectMs   = 0;
+    var lastFixMs      = 0;
     var fixCount       = 0;
     var compassHeading = null;   /* råvärde, hanteras av SensorFusion */
 
@@ -552,7 +556,7 @@
           }));
         }
 
-        if (SensorFusion.hasHeading()) {
+        if (SensorFusion.hasHeading() && now - lastFixMs > FIX_COOLDOWN_MS) {
           /* Välj bästa skylt: närmast (kortast Posit-avstånd) om flera synliga */
           var bestPose = null, bestRow = null, bestDist = Infinity;
           for (var i = 0; i < dets.length; i++) {
@@ -569,6 +573,7 @@
           }
 
           if (bestPose && bestRow) {
+            lastFixMs = now;
             applyArUcoFix(bestPose, bestRow);
           }
         }
