@@ -87,6 +87,12 @@
       max-width: 340px; text-align: center; pointer-events: none;
     }
     #status-label.found { color: #6dffb0; }
+    #debug-markers {
+      font-family: monospace; font-size: 0.8rem; color: #999;
+      background: rgba(0,0,0,0.6); padding: 6px 12px; border-radius: 8px;
+      pointer-events: none;
+    }
+    #debug-markers.has { color: #6dffb0; }
     #error-overlay {
       position: fixed; inset: 0; background: #1a1a2e; color: #fff;
       display: flex; flex-direction: column; align-items: center;
@@ -141,6 +147,7 @@
       <button id="rescan-btn">Rikta om ↺</button>
     </div>
     <div id="status-label">Rikta kameran mot en skylt för att kalibrera...</div>
+    <div id="debug-markers">Markörer: –</div>
   </div>
 
   <a-scene
@@ -464,6 +471,20 @@
       });
     }
 
+    /* Debug-HUD: visa vilka markörer kameran ser just nu */
+    var debugMarkers = document.getElementById('debug-markers');
+    function updateDebugMarkers(dets) {
+      if (dets.length === 0) {
+        debugMarkers.textContent = 'Markörer: –';
+        debugMarkers.className = '';
+        return;
+      }
+      debugMarkers.textContent = 'Markörer: ' + dets.map(function (d) {
+        return 'Markör ' + d.name.replace(/\D/g, '') + ' · ' + Math.round(d.score * 100) + '%';
+      }).join(', ');
+      debugMarkers.className = 'has';
+    }
+
     /* ── Skylt: bäring + avstånd ur Posit ── */
     function getBearingFromPositPose(pose) {
       var R  = pose.bestRotation;
@@ -516,12 +537,14 @@
       }
 
       var now = Date.now();
+      /* Detektera kontinuerligt (debug-HUD) – fix kräver heading */
       if (arActive && now - lastDetectMs > 100 &&
-          cam.readyState >= cam.HAVE_ENOUGH_DATA && SensorFusion.hasHeading()) {
+          cam.readyState >= cam.HAVE_ENOUGH_DATA && PD.isReady()) {
         lastDetectMs = now;
         procCtx.drawImage(cam, 0, 0, PROC_W, PROC_H);
         var imageData = procCtx.getImageData(0, 0, PROC_W, PROC_H);
-        var dets = PD.isReady() ? PD.detect(imageData) : [];
+        var dets = PD.detect(imageData);
+        updateDebugMarkers(dets);
 
         if (dets.length > 0) {
           console.log('[D] Skyltar:', dets.map(function (d) {
@@ -529,23 +552,25 @@
           }));
         }
 
-        /* Välj bästa skylt: närmast (kortast Posit-avstånd) om flera synliga */
-        var bestPose = null, bestRow = null, bestDist = Infinity;
-        for (var i = 0; i < dets.length; i++) {
-          var det = dets[i];
-          var row = markerRows.find(function (r) { return r.namn === det.name; });
-          if (!row) continue;
-          var sz    = row.markerSize || 0.50;
-          var posit = new POS.Posit(sz * 1000, PROC_W);
-          var pose  = posit.pose(centerCorners(det.corners));
-          if (!pose) continue;
-          var t = pose.bestTranslation;
-          var d = Math.sqrt(t[0]*t[0] + t[1]*t[1] + t[2]*t[2]);
-          if (d < bestDist) { bestDist = d; bestPose = pose; bestRow = row; }
-        }
+        if (SensorFusion.hasHeading()) {
+          /* Välj bästa skylt: närmast (kortast Posit-avstånd) om flera synliga */
+          var bestPose = null, bestRow = null, bestDist = Infinity;
+          for (var i = 0; i < dets.length; i++) {
+            var det = dets[i];
+            var row = markerRows.find(function (r) { return r.namn === det.name; });
+            if (!row) continue;
+            var sz    = row.markerSize || 0.50;
+            var posit = new POS.Posit(sz * 1000, PROC_W);
+            var pose  = posit.pose(centerCorners(det.corners));
+            if (!pose) continue;
+            var t = pose.bestTranslation;
+            var d = Math.sqrt(t[0]*t[0] + t[1]*t[1] + t[2]*t[2]);
+            if (d < bestDist) { bestDist = d; bestPose = pose; bestRow = row; }
+          }
 
-        if (bestPose && bestRow) {
-          applyArUcoFix(bestPose, bestRow);
+          if (bestPose && bestRow) {
+            applyArUcoFix(bestPose, bestRow);
+          }
         }
       }
 

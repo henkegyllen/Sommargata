@@ -86,6 +86,12 @@
       max-width: 300px; text-align: center; pointer-events: none;
     }
     #marker-label.found { color: #6dffb0; }
+    #debug-markers {
+      font-family: monospace; font-size: 0.8rem; color: #999;
+      background: rgba(0,0,0,0.6); padding: 6px 12px; border-radius: 8px;
+      pointer-events: none;
+    }
+    #debug-markers.has { color: #6dffb0; }
     #error-overlay {
       position: fixed; inset: 0; background: #1a1a2e; color: #fff;
       display: flex; flex-direction: column; align-items: center;
@@ -140,6 +146,7 @@
       <button id="rescan-btn">Rikta om ↺</button>
     </div>
     <div id="marker-label">Rikta kameran mot skylten vid startpunkten...</div>
+    <div id="debug-markers">Markörer: –</div>
   </div>
 
   <a-scene
@@ -402,6 +409,20 @@
       });
     }
 
+    /* Debug-HUD: visa vilka markörer kameran ser just nu */
+    var debugMarkers = document.getElementById('debug-markers');
+    function updateDebugMarkers(dets) {
+      if (dets.length === 0) {
+        debugMarkers.textContent = 'Markörer: –';
+        debugMarkers.className = '';
+        return;
+      }
+      debugMarkers.textContent = 'Markörer: ' + dets.map(function (d) {
+        return 'Markör ' + d.name.replace(/\D/g, '') + ' · ' + Math.round(d.score * 100) + '%';
+      }).join(', ');
+      debugMarkers.className = 'has';
+    }
+
     /* ── Skylt: extrahera bäring ur posit-rotation (kamerarymden → världsrymden) ──
      *
      * posit.pose() returnerar markörens pose i kamerarymden (ej världsrymden som WebXR).
@@ -435,22 +456,26 @@
     /* ── Detektionsloop (10 Hz, stoppar när markör hittad) ── */
     function tick() {
       var now = Date.now();
-      if (arActive && !correctionDone && now - lastDetectMs > 100 &&
-          cam.readyState >= cam.HAVE_ENOUGH_DATA && compassHeading !== null && markerRow !== null) {
+      /* Detektera kontinuerligt (debug-HUD) – korrektion appliceras bara en gång */
+      if (arActive && now - lastDetectMs > 100 &&
+          cam.readyState >= cam.HAVE_ENOUGH_DATA && PD.isReady()) {
         lastDetectMs = now;
         procCtx.drawImage(cam, 0, 0, PROC_W, PROC_H);
         var imageData = procCtx.getImageData(0, 0, PROC_W, PROC_H);
-        var dets = PD.isReady() ? PD.detect(imageData) : [];
+        var dets = PD.detect(imageData);
+        updateDebugMarkers(dets);
         if (dets.length > 0) {
           console.log('Skyltar:', dets.map(function (d) {
             return d.name + ' (' + (d.score * 100).toFixed(0) + '%)';
           }));
         }
-        for (var i = 0; i < dets.length; i++) {
-          if (dets[i].name === markerRow.namn) {
-            var posit = new POS.Posit(MARKER_SIZE_M * 1000, PROC_W);
-            var pose  = posit.pose(centerCorners(dets[i].corners));
-            if (pose) { applyMarkerCorrection(pose); break; }
+        if (!correctionDone && compassHeading !== null && markerRow !== null) {
+          for (var i = 0; i < dets.length; i++) {
+            if (dets[i].name === markerRow.namn) {
+              var posit = new POS.Posit(MARKER_SIZE_M * 1000, PROC_W);
+              var pose  = posit.pose(centerCorners(dets[i].corners));
+              if (pose) { applyMarkerCorrection(pose); break; }
+            }
           }
         }
       }
