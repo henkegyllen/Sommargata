@@ -17,11 +17,13 @@ ANKAR,56.8790818,14.8015807,105.00
 #SPARR_4, 56.8792178, 14.8016934, 56.8792252, 14.8015190
 
 # Pyramidmarkör (Metod B, styv, platt på pyramidtoppen vid ANKAR/Tarta_3):
-#   bearing = kompassriktning som utskriftens OVERKANT pekar mot (mat vid montering!)
-#   sista kolumnen = utskriftens fysiska bredd i meter
-#   elev = pyramidtoppens hojd — mat och justera, 106.00 ar placeholder
-# Aktivera (ta bort #) nar markoren ar monterad och inmatt:
-#Pyramid.png,56.8790818,14.8015807,106.00,0.0,0.15
+#   bearing 5.70 = utskriftens OVERKANT pekar mot gatans norrriktning vid montering.
+#     (Hamnar allt 180 grader fel: byt till 185.70)
+#   elev 107.00 = mark 105.00 + pyramidhojd 2.00 m
+#   0.29 = utskriftsbredd i meter (A3). Verifiera efter utskrift:
+#     mat svarta ArUco-kvadraten och multiplicera med 1.714
+# Aktivera (ta bort #) nar markoren ar monterad:
+#Pyramid.png,56.8790818,14.8015807,107.00,5.70,0.29
 
 Bild_11.png,56.879154,14.801580,108.00,185.70
 Bild_12.png,56.879154,14.801580,108.00,5.70
