@@ -12,10 +12,14 @@
 namn,lat,lon,elev,synlig_inom,scale
 ANKAR,56.8790818,14.8015807,105.00
 # KALAS-raden (publika ingangen index.html): stapunkt + riktning mot clownen.
-#   lat/lon = dar anvandaren SKA STA nar clownen ar inpassad i rutan
-#   bearing (kolumn 5) = baring stapunkt -> clown (= riktningen anvandaren ar vand at)
-# Utan denna rad anvands ANKAR + gatans baring 5.70 som fallback.
-#KALAS,56.8790818,14.8015807,105.00,5.70
+#   Geometri: clownen sitter 1 m RAKT SYD om pyramidens centrum (ANKAR):
+#     clown = 56.8790728, 14.8015807
+#   Stapunkt nedan = 4 m syd om clownen (rakt linje) -> bearing 0.0 (rakt norr).
+#   Justera staavstandet nar clownen ar tryckt: varje meter syd = -0.0000090 pa lat.
+#   Markera stapunkten fysiskt pa marken (fotavtryck/tejp) och stall rutans
+#   storlek sa att clownen fyller den precis darifran.
+# Aktivera (ta bort #) nar clownen ar uppsatt:
+#KALAS,56.8790369,14.8015807,105.00,0.0
 #SPARR_1, 56.8789476, 14.8016552, 56.8789553, 14.8014751
 #SPARR_2, 56.8790002, 14.8016609, 56.8790490, 14.8014922
 #SPARR_3, 56.8790956, 14.8016752, 56.8791029, 14.8015004
