@@ -91,6 +91,7 @@
   <a-scene
     id="ar-scene"
     embedded
+    webxr="requiredFeatures: local-floor; optionalFeatures: dom-overlay; domOverlay: #ui-overlay"
     renderer="antialias: true; alpha: true; colorManagement: true"
     background="transparent: true"
     vr-mode-ui="enabled: false"
@@ -152,6 +153,8 @@
     var arActive      = false;
     var csvLoaded     = false;
     var camReady      = false;
+    var xrSupported   = false;       /* WebXR/ARCore tillgängligt (Android Chrome) */
+    var xrMode        = false;       /* körs sessionen via WebXR? */
 
     var splash       = document.getElementById('splash');
     var splashStatus = document.getElementById('splash-status');
@@ -275,6 +278,12 @@
 
     function updateVisibility() {
       var camPos = { x: 0, z: 0 };
+      /* I WebXR-läget rör sig kameran (användaren går) — följ den */
+      if (xrMode && scene.camera) {
+        var v = new THREE.Vector3();
+        scene.camera.getWorldPosition(v);
+        camPos.x = v.x; camPos.z = v.z;
+      }
       placedObjects.forEach(function (obj, idx) {
         var s = checkVisible(camPos, obj);
         if (s === obj.currentlyVisible) return;
@@ -370,6 +379,13 @@
       }
     }
 
+    /* WebXR-stöd? (Android Chrome + ARCore → stabil VIO-spårning) */
+    if (navigator.xr) {
+      navigator.xr.isSessionSupported('immersive-ar').then(function (ok) {
+        xrSupported = ok;
+      });
+    }
+
     /* Väntar på första deviceorientation-händelsen (iOS: kommer först
        efter tillståndsklicket) så att gyro-yaw är färskt vid kalibrering */
     function waitForOrientation() {
@@ -384,6 +400,29 @@
     /* ── Starta AR: lås kalibreringen ur clown-inpassningen ── */
     startBtn.addEventListener('click', async function () {
       startBtn.classList.remove('enabled');
+
+      if (xrSupported) {
+        /*
+         * WebXR-vägen (Android/ARCore) — STABIL spårning, ingen gyro-vobbel.
+         * Sessionens rymd förankras med −Z = blickriktningen vid sessionstart.
+         * Användaren tittar på clownen just då ⇒ rotY = clownbäringen rakt av,
+         * origo = ståpunkten. ARCore:s visuella odometri håller sedan allt.
+         */
+        xrMode = true;
+        splashStatus.textContent = 'Håll kvar siktet på clownen...';
+        sceneRoot.setAttribute('rotation', '0 ' + kalas.bearing.toFixed(2) + ' 0');
+        sceneRoot.setAttribute('position', '0 0 0');
+
+        /* Släpp kameran till ARCore */
+        if (cam.srcObject) {
+          cam.srcObject.getTracks().forEach(function (t) { t.stop(); });
+          cam.srcObject = null;
+        }
+        scene.enterAR();
+        return;   /* enter-vr-eventet tar över */
+      }
+
+      /* ── Fallback (iOS): embedded-läge med gyrobaserad rotation ── */
       splashStatus.textContent = 'Startar...';
 
       /* iOS 13+: rörelsetillstånd måste begäras i klicket */
@@ -407,7 +446,7 @@
       var psi  = camEl.object3D.rotation.y * 180 / Math.PI;
       var rotY = kalas.bearing + psi;
       sceneRoot.setAttribute('rotation', '0 ' + rotY.toFixed(2) + ' 0');
-      console.log('[Kalas] Kalibrering: bearing', kalas.bearing, 'psi', psi.toFixed(1), 'rotY', rotY.toFixed(1));
+      console.log('[Kalas] Kalibrering (embedded): bearing', kalas.bearing, 'psi', psi.toFixed(1), 'rotY', rotY.toFixed(1));
 
       /* Växla till AR-läge: video fullskärm, splash bort */
       document.body.appendChild(cam);          /* flytta ut ur cam-box */
@@ -421,8 +460,29 @@
       visTimer = setInterval(updateVisibility, VISIBILITY_HZ);
     });
 
+    /* WebXR-sessionens livscykel */
+    scene.addEventListener('enter-vr', function () {
+      if (!xrMode) return;
+      splash.classList.add('hidden');
+      uiOverlay.classList.remove('hidden');
+      arActive = true;
+      placedObjects.forEach(function (obj) { obj.arActive = true; });
+      visTimer = setInterval(updateVisibility, VISIBILITY_HZ);
+      console.log('[Kalas] WebXR-session startad, rotY =', kalas.bearing.toFixed(1));
+    });
+    scene.addEventListener('exit-vr', function () {
+      if (!xrMode) return;
+      clearInterval(visTimer);
+      window.location.reload();
+    });
+
     /* Passa in clownen igen: tillbaka till splash-läget (omkalibrering) */
     recalBtn.addEventListener('click', function () {
+      if (xrMode) {
+        /* ARCore äger kameran — enklast är omstart av flödet */
+        window.location.reload();
+        return;
+      }
       clearInterval(visTimer);
       arActive = false;
       cam.classList.remove('fullscreen');
