@@ -209,13 +209,24 @@
     });
 
     /* ── A-Frame system: läser image-tracking varje frame ── */
+    var itWarned = false;
     AFRAME.registerSystem('marker-tracker', {
       tick: function () {
         if (correctionDone) return;
         var renderer = this.el.renderer;
         if (!renderer || !renderer.xr) return;
         var frame = renderer.xr.getFrame ? renderer.xr.getFrame() : null;
-        if (!frame || !frame.getImageTrackingResults) return;
+        if (!frame) return;
+        if (!frame.getImageTrackingResults) {
+          /* WebXR Image Tracking kräver chrome://flags/#webxr-incubations.
+             Utan flaggan ignoreras featuren TYST — säg det högt istället. */
+          if (!itWarned) {
+            itWarned = true;
+            markerLabel.textContent = 'Bildspårning EJ aktiv! Aktivera "WebXR Incubations" ' +
+              'i chrome://flags och starta om Chrome. Kör kompassläge tills dess.';
+          }
+          return;
+        }
         var results = frame.getImageTrackingResults();
         for (var i = 0; i < results.length; i++) {
           var r = results[i];

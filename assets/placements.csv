@@ -22,8 +22,7 @@ ANKAR,56.8790818,14.8015807,105.00
 #   elev 107.00 = mark 105.00 + pyramidhojd 2.00 m
 #   0.29 = utskriftsbredd i meter (A3). Verifiera efter utskrift:
 #     mat svarta ArUco-kvadraten och multiplicera med 1.714
-# Aktivera (ta bort #) nar markoren ar monterad:
-#Pyramid.png,56.8790818,14.8015807,107.00,5.70,0.29
+Pyramid.png,56.8790818,14.8015807,107.00,5.70,0.29
 
 Bild_11.png,56.879154,14.801580,108.00,185.70
 Bild_12.png,56.879154,14.801580,108.00,5.70
