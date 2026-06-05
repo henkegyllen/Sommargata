@@ -65,6 +65,27 @@
       font-family: sans-serif; font-size: 0.8rem; color: #fff;
       background: rgba(0,0,0,0.5); padding: 6px 12px; border-radius: 6px;
     }
+    /* Sikteskalibrering: vertikal siktlinje + bekräftelsepanel */
+    #sight-line {
+      position: fixed; left: 50%; top: 0; bottom: 0; width: 0;
+      border-left: 3px dashed rgba(109,255,176,0.95);
+      transform: translateX(-1px); pointer-events: none; z-index: 1001;
+    }
+    #sight-panel {
+      position: fixed; left: 0; right: 0; bottom: 36px;
+      display: flex; flex-direction: column; align-items: center; gap: 12px;
+      pointer-events: none; z-index: 1002;
+    }
+    #sight-panel .sight-text {
+      font-family: sans-serif; font-size: 0.95rem; color: #fff;
+      background: rgba(0,0,0,0.7); padding: 10px 18px; border-radius: 10px;
+      max-width: 320px; text-align: center; line-height: 1.5;
+    }
+    #sight-confirm {
+      pointer-events: all; padding: 16px 40px; font-size: 1.15rem; font-weight: bold;
+      border: none; border-radius: 12px; background: #27ae60; color: #fff; cursor: pointer;
+    }
+    #resight-btn { pointer-events: all; }
     #error-overlay {
       position: fixed; inset: 0; background: #1a1a2e; color: #fff;
       display: flex; flex-direction: column; align-items: center;
@@ -82,8 +103,9 @@
     <span class="method-badge">METOD A: STÅ VID MARKÖREN</span>
     <h2>Sommargatan AR</h2>
     <p class="method-desc">
-      Gå till <strong>ArUco-markören</strong> (ankarpunkten). Stå exakt vid den
-      och tryck Starta AR. Inga GPS-fel – du är origo.
+      Ställ dig vid <strong>pyramiden</strong> (ankarpunkten) och tryck Starta AR.
+      Sikta sedan linjen längs gågatan och bekräfta — position och riktning
+      blir exakta utan GPS, kompass eller markörskanning.
     </p>
     <div id="load-status"    class="status-row warn">Laddar placements.csv...</div>
     <div id="gps-status"     class="status-row warn hidden">Söker GPS (vägledning)...</div>
@@ -117,6 +139,17 @@
   <div id="ui-overlay" class="hidden">
     <button id="exit-ar-btn">&#10005; Avsluta AR</button>
     <div id="acc-label">Metod A</div>
+    <button id="resight-btn" class="hidden">Sikta om &#8634;</button>
+
+    <div id="sight-line"></div>
+    <div id="sight-panel">
+      <div class="sight-text">
+        Stå vid <strong>pyramiden</strong>.<br>
+        Rikta den gröna linjen <strong>rakt längs gågatan</strong> mot
+        norra änden — tryck sedan på knappen.
+      </div>
+      <button id="sight-confirm">&#10003; Linjen ligger längs gatan</button>
+    </div>
   </div>
 
   <a-scene
@@ -133,6 +166,7 @@
   <script>
     var VISIBILITY_HZ   = 100;
     var DECLINATION_DEG = -4.4;  /* deklination Växjö 4.4°E (WMM) – negativt tecken: fälttest visade att korrektionen ska åt andra hållet i deviceorientation-rymden */
+    var PATH_BEARING    = 5.7010969;  /* gågatans bäring söder→norr (ArcGIS Pro, SWEREF 99 15 00) */
 
     var anchor        = null;
     var placedObjects = [];
@@ -412,9 +446,51 @@
       );
     }
 
+    /*
+     * ── Sikteskalibrering ──
+     * Position: användaren STÅR vid ankaret när hen bekräftar → scenens
+     * origo flyttas till kamerans fotpunkt i AR-rymden. Exakt, utan GPS.
+     * Rotation: användaren siktar linjen längs gågatan (inmätt bäring
+     * PATH_BEARING) → θ = β − viewBearingAR. Exakt, utan kompass.
+     * ARCore:s visuella odometri håller därefter både position och
+     * rotation utan drift — till skillnad från kompassen.
+     */
+    function applySightCalibration() {
+      var threeCamera = scene.camera;
+      if (!threeCamera) return;
+
+      var dir = new THREE.Vector3();
+      threeCamera.getWorldDirection(dir);
+      var viewBearingAR = Math.atan2(dir.x, -dir.z) * 180 / Math.PI;
+      var rotY = PATH_BEARING - viewBearingAR;
+
+      var camPos = new THREE.Vector3();
+      threeCamera.getWorldPosition(camPos);
+
+      sceneRoot.setAttribute('rotation', '0 ' + rotY.toFixed(2) + ' 0');
+      sceneRoot.setAttribute('position',
+        camPos.x.toFixed(3) + ' 0 ' + camPos.z.toFixed(3));
+
+      document.getElementById('sight-line').classList.add('hidden');
+      document.getElementById('sight-panel').classList.add('hidden');
+      document.getElementById('resight-btn').classList.remove('hidden');
+      accLabelEl.textContent = 'Kalibrerad ✓ (rotY ' + rotY.toFixed(1) + '°)';
+
+      console.log('[A] Sikteskalibrering: viewBearingAR', viewBearingAR.toFixed(1),
+        'rotY', rotY.toFixed(1), 'pos', camPos.x.toFixed(2), camPos.z.toFixed(2));
+    }
+
+    var accLabelEl = document.getElementById('acc-label');
+    document.getElementById('sight-confirm').addEventListener('click', applySightCalibration);
+    document.getElementById('resight-btn').addEventListener('click', function () {
+      document.getElementById('sight-line').classList.remove('hidden');
+      document.getElementById('sight-panel').classList.remove('hidden');
+      document.getElementById('resight-btn').classList.add('hidden');
+    });
+
     /* ── Knappar ── */
     startBtn.addEventListener('click', function () {
-      /* Metod A: inga GPS-korrigeringar – användaren ÄR ankaret (origo) */
+      /* Grov initial rotation från kompassen tills siktet kalibrerats */
       if (compassHeading !== null) {
         sceneRoot.setAttribute('rotation', '0 ' + (DECLINATION_DEG - compassHeading).toFixed(1) + ' 0');
       }
