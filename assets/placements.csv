@@ -16,6 +16,13 @@ ANKAR,56.8790818,14.8015807,105.00
 #SPARR_3, 56.8790956, 14.8016752, 56.8791029, 14.8015004
 #SPARR_4, 56.8792178, 14.8016934, 56.8792252, 14.8015190
 
+# Pyramidmarkör (Metod B, styv, platt på pyramidtoppen vid ANKAR/Tarta_3):
+#   bearing = kompassriktning som utskriftens OVERKANT pekar mot (mat vid montering!)
+#   sista kolumnen = utskriftens fysiska bredd i meter
+#   elev = pyramidtoppens hojd — mat och justera, 106.00 ar placeholder
+# Aktivera (ta bort #) nar markoren ar monterad och inmatt:
+#Pyramid.png,56.8790818,14.8015807,106.00,0.0,0.15
+
 Bild_11.png,56.879154,14.801580,108.00,185.70
 Bild_12.png,56.879154,14.801580,108.00,5.70
 Bild_13.png,56.879219,14.801638,108.00,185.70

@@ -234,12 +234,24 @@
 
     /*
      * Extraherar markörens bäring i WebXR-rymden från pose-matrisen.
-     * Kolumn 2 (index 8,9,10) = +Z-axel för image-space = markörens normal (mot betraktaren).
-     * Returnerar grader CW från north (0–360).
+     *
+     * VERTIKAL markör (vägg/flagga): kolumn 2 (m[8..10]) = +Z = normalen
+     * mot betraktaren — dess horisontella riktning är bäringen.
+     * CSV-bearing = kompassriktningen normalen pekar mot.
+     *
+     * HORISONTELL markör (platt på pyramidtoppen): normalen pekar rakt UPP
+     * — horisontellt odefinierad. Använd istället kolumn 1 (m[4..6]) = +Y
+     * = bildens ÖVERKANTSRIKTNING. CSV-bearing = kompassriktningen som
+     * utskriftens överkant pekar mot (mäts vid montering!).
+     *
+     * Avgörs per detektion via normalens vertikalkomponent (m[9]).
      */
     function getBearingFromPose(pose) {
       var m = pose.transform.matrix;
-      var bearing = Math.atan2(m[8], -m[10]) * 180 / Math.PI;
+      var horizontal = Math.abs(m[9]) > 0.7;   /* normalen pekar uppåt/nedåt */
+      var x = horizontal ? m[4] : m[8];
+      var z = horizontal ? m[6] : m[10];
+      var bearing = Math.atan2(x, -z) * 180 / Math.PI;
       return (bearing + 360) % 360;
     }
 
@@ -306,7 +318,7 @@
           if (isNaN(lat)||isNaN(lon)) return;
           if (nam.toLowerCase().endsWith('.png')) {
             objectRows.push({namn:nam,lat:lat,lon:lon,elev:val(c[3]),
-              bearing:val(c[4]),synligInom:null,csvScale:null,
+              bearing:val(c[4]),markerSize:val(c[5]),synligInom:null,csvScale:null,
               modelLoaded:false,arActive:false,currentlyVisible:false});
           } else {
             objectRows.push({namn:nam,lat:lat,lon:lon,elev:val(c[3]),
@@ -425,9 +437,13 @@
       anchor = parsed.objectRows.find(function(r){ return r.namn.toUpperCase()==='ANKAR'; });
       if(!anchor){ showError('Ingen ANKAR-rad i placements.csv.'); return; }
 
-      /* Ankar-markör för bildspårning – temporärt Bild_11, byt till dedikerad ArUco vid behov */
-      var ANCHOR_MARKER = 'Bild_11.png';
-      markerRows = parsed.objectRows.filter(function(r){ return r.namn === ANCHOR_MARKER; });
+      /* Ankar-markörer för bildspårning. Pyramid.png = styv markör på
+         pyramidtoppen (primär — ARCore klarar den, till skillnad från
+         tygflaggorna som är feature-fattiga). Bild_11 kvar som reserv. */
+      var ANCHOR_MARKERS = ['Pyramid.png', 'Bild_11.png'];
+      markerRows = parsed.objectRows.filter(function(r){
+        return ANCHOR_MARKERS.indexOf(r.namn) !== -1;
+      });
 
       /* GLB-rader = 3D-objekt */
       placedObjects = parsed.objectRows
@@ -494,8 +510,8 @@
         var session = await navigator.xr.requestSession('immersive-ar', {
           requiredFeatures: ['local-floor'],
           optionalFeatures: ['image-tracking','dom-overlay'],
-          trackedImages: markerBitmaps.map(function(bm){
-            return { image: bm, widthInMeters: MARKER_SIZE_M };
+          trackedImages: markerBitmaps.map(function(bm, i){
+            return { image: bm, widthInMeters: markerRows[i].markerSize || MARKER_SIZE_M };
           }),
           domOverlay: { root: uiOverlay }
         });
