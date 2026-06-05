@@ -120,7 +120,7 @@
     <div id="compass-status" class="status-row warn hidden">Kompass: tillstånd begärs vid start</div>
     <button id="compass-cal-btn" class="hidden">Kalibrera kompass ⊕</button>
     <button id="start-ar-btn">Starta AR</button>
-    <a href="index.html" id="back-start">&#8592; Tillbaka</a>
+    <a href="test.html" id="back-start">&#8592; Tillbaka</a>
   </div>
 
   <div id="cal-overlay" class="hidden">
@@ -137,7 +137,7 @@
   <div id="error-overlay" class="hidden">
     <h2>Fel</h2>
     <p id="error-message"></p>
-    <a href="index.html">&#8592; Gå tillbaka</a>
+    <a href="test.html">&#8592; Gå tillbaka</a>
   </div>
 
   <div id="ui-overlay" class="hidden">
@@ -661,7 +661,7 @@
       clearInterval(visTimer);
       arActive = false;
       if (cam.srcObject) cam.srcObject.getTracks().forEach(function (t) { t.stop(); });
-      window.location.href = 'index.html';
+      window.location.href = 'test.html';
     });
 
     function showError(msg) {

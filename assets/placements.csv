@@ -11,6 +11,11 @@
 #
 namn,lat,lon,elev,synlig_inom,scale
 ANKAR,56.8790818,14.8015807,105.00
+# KALAS-raden (publika ingangen index.html): stapunkt + riktning mot clownen.
+#   lat/lon = dar anvandaren SKA STA nar clownen ar inpassad i rutan
+#   bearing (kolumn 5) = baring stapunkt -> clown (= riktningen anvandaren ar vand at)
+# Utan denna rad anvands ANKAR + gatans baring 5.70 som fallback.
+#KALAS,56.8790818,14.8015807,105.00,5.70
 #SPARR_1, 56.8789476, 14.8016552, 56.8789553, 14.8014751
 #SPARR_2, 56.8790002, 14.8016609, 56.8790490, 14.8014922
 #SPARR_3, 56.8790956, 14.8016752, 56.8791029, 14.8015004

@@ -2,112 +2,449 @@
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#1a1a2e">
-  <title>Sommargatan AR – Växjö Kommun</title>
+  <title>Kalasvärlden – Sommargatan Växjö</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <link rel="stylesheet" href="css/ui.css">
   <style>
-    .method-group {
-      width: 100%;
-      max-width: 360px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      margin-bottom: 8px;
+    html, body { margin: 0; overflow: hidden; background: #1a1a2e; }
+
+    /* Kameravideon: i splash-läge en inramad ruta, i AR-läge fullskärm */
+    #cam {
+      object-fit: cover; pointer-events: none; background: #000;
     }
-    .method-btn {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 4px;
-      padding: 14px 18px;
-      border-radius: 12px;
-      text-decoration: none;
-      color: #fff;
-      transition: opacity 0.15s;
+    #cam.boxed {
+      position: relative; width: 100%; height: 100%;
+      border-radius: 16px;
     }
-    .method-btn:active { opacity: 0.8; }
-    .method-btn .badge {
-      font-size: 10px;
-      letter-spacing: 0.8px;
-      font-weight: bold;
-      opacity: 0.8;
+    #cam.fullscreen {
+      position: fixed; inset: 0; width: 100%; height: 100%;
+      z-index: 0; border-radius: 0;
     }
-    .method-btn .title {
-      font-size: 17px;
-      font-weight: bold;
+
+    #ar-scene {
+      position: fixed !important; inset: 0 !important; z-index: 1 !important;
     }
-    .method-btn .desc {
-      font-size: 13px;
-      color: rgba(255,255,255,0.7);
-      line-height: 1.4;
+    /* A-Frames transparenta canvas får inte fånga pekklick */
+    #ar-scene .a-canvas, canvas.a-canvas { pointer-events: none !important; }
+
+    /* ── Splash (kalas-ingången) ── */
+    #splash {
+      position: fixed; inset: 0; background: #1a1a2e; color: #fff;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 16px; z-index: 9999;
+      padding: 24px; text-align: center; font-family: sans-serif;
     }
-    .btn-gps  { background: #2a6b4a; }
-    .btn-a    { background: #7b4a9a; }
-    .btn-b    { background: #c0392b; }
-    .btn-c    { background: #1a6b8a; }
-    .btn-d    { background: #2a4a7a; }
-    .divider {
-      width: 100%;
-      max-width: 360px;
-      border: none;
-      border-top: 1px solid rgba(255,255,255,0.1);
-      margin: 12px 0 4px;
+    #splash h1 {
+      margin: 0; font-size: 1.7rem;
+      background: linear-gradient(90deg, #ff6b9d, #ffd93d, #6dffb0, #6bb5ff);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
     }
-    .section-label {
-      font-size: 11px;
-      color: #666688;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      margin-bottom: 8px;
+    #splash .instruction { font-size: 1.05rem; color: #ffd93d; margin: 0; font-weight: bold; }
+    #cam-box {
+      width: min(78vw, 340px); aspect-ratio: 3 / 4;
+      border: 4px dashed #ff6b9d; border-radius: 20px;
+      overflow: hidden; position: relative; background: #000;
     }
+    #cam-hint {
+      position: absolute; inset: 0; display: flex; align-items: center;
+      justify-content: center; color: #888; font-size: 0.9rem;
+      pointer-events: none; padding: 20px; text-align: center;
+    }
+    #start-kalas-btn {
+      padding: 16px 48px; font-size: 1.2rem; font-weight: bold;
+      border: none; border-radius: 14px; color: #fff; cursor: pointer;
+      background: linear-gradient(90deg, #ff6b9d, #c44dff);
+      opacity: 0.4; pointer-events: none; transition: opacity 0.3s;
+    }
+    #start-kalas-btn.enabled { opacity: 1; pointer-events: all; }
+    #splash-status { font-size: 0.85rem; color: #9999bb; min-height: 1.2em; }
+    #test-link { color: #555577; text-decoration: none; font-size: 0.75rem; margin-top: 8px; }
+
+    /* ── AR-läge ── */
+    #ui-overlay {
+      position: fixed; top: 0; left: 0; right: 0;
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 12px 16px; pointer-events: none; z-index: 1000;
+    }
+    #ui-overlay button {
+      pointer-events: all; padding: 8px 16px; border: none; border-radius: 8px;
+      background: rgba(0,0,0,0.6); color: #fff; font-size: 0.9rem; cursor: pointer;
+    }
+
+    #error-overlay {
+      position: fixed; inset: 0; background: #1a1a2e; color: #fff;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 16px; z-index: 99999;
+      padding: 32px; text-align: center; font-family: sans-serif;
+    }
+    #error-overlay h2 { color: #ff6b6b; margin: 0; }
+    #error-overlay a  { color: #aaa; }
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
-  <main class="landing">
-    <h1>Sommargatan 2026</h1>
-    <p class="municipality">Växjö Kommun</p>
 
-    <div class="method-group">
-      <p class="section-label">Välj AR-metod</p>
+  <a-scene
+    id="ar-scene"
+    embedded
+    renderer="antialias: true; alpha: true; colorManagement: true"
+    background="transparent: true"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false"
+    loading-screen="enabled: false">
+    <a-assets id="asset-manager" timeout="30000"></a-assets>
+    <a-entity id="scene-root"></a-entity>
+    <a-camera look-controls="magicWindowTrackingEnabled: true; touchEnabled: false"
+              wasd-controls="enabled: false"
+              position="0 1.6 0"></a-camera>
+  </a-scene>
 
-      <a href="gps.html" class="method-btn btn-gps">
-        <span class="badge">REN GPS</span>
-        <span class="title">GPS + Kompass</span>
-        <span class="desc">Kompassbaserad placering med GPS-kompensation. Stå nära ankarpunkten och tryck start.</span>
-      </a>
-
-      <a href="gps-a.html" class="method-btn btn-a">
-        <span class="badge">METOD A</span>
-        <span class="title">Stå vid pyramiden + sikta</span>
-        <span class="desc">Ställ dig vid pyramiden och sikta linjen längs gågatan. Exakt position och riktning – helt utan GPS, kompass och markörskanning.</span>
-      </a>
-
-      <a href="gps-b.html" class="method-btn btn-b">
-        <span class="badge">METOD B</span>
-        <span class="title">Bildspårning (ARCore)</span>
-        <span class="desc">Kameran hittar ArUco-markören automatiskt och snäpper positionen till cm-noggrannhet. Kräver Chrome + ARCore.</span>
-      </a>
-
-      <a href="gps-c.html" class="method-btn btn-c">
-        <span class="badge">METOD C</span>
-        <span class="title">Korsplattform (iOS + Android)</span>
-        <span class="desc">Fungerar utan ARCore. Kameran känner igen skyltarna och korrigerar riktningen.</span>
-      </a>
-
-      <a href="gps-d.html" class="method-btn btn-d">
-        <span class="badge">METOD D</span>
-        <span class="title">Sensorfusion 6DOF</span>
-        <span class="desc">Stegräkning + kompass spårar positionen kontinuerligt. Skyltarna ger ±0.5 m korrektion. Modellerna står stilla när du går.</span>
-      </a>
+  <div id="splash">
+    <h1>Välkommen till kalasvärlden</h1>
+    <p class="instruction">Passa in clownen i rutan</p>
+    <div id="cam-box">
+      <video id="cam" class="boxed" autoplay playsinline muted></video>
+      <div id="cam-hint">Startar kameran...</div>
     </div>
+    <button id="start-kalas-btn">&#127880; Starta AR</button>
+    <div id="splash-status"></div>
+    <a id="test-link" href="test.html">testingång</a>
+  </div>
 
-    <hr class="divider">
+  <div id="error-overlay" class="hidden">
+    <h2>Hoppsan!</h2>
+    <p id="error-message"></p>
+    <a href="index.html">&#8634; Försök igen</a>
+  </div>
 
-    <p class="browser-note">
-      Metod A–C: <strong>Chrome</strong> (Android) eller <strong>Safari</strong> (iOS).<br>
-      Metod B kräver ARCore.
-    </p>
-  </main>
+  <div id="ui-overlay" class="hidden">
+    <button id="exit-ar-btn">&#10005; Avsluta</button>
+    <button id="recal-btn">Passa in clownen igen &#8634;</button>
+  </div>
+
+  <script>
+    /*
+     * KALASINGÅNGEN — publik startsida.
+     *
+     * Användaren passar in clownen (fysiskt uppsatt, inmätt riktning) i
+     * kamerarutan. När clownen fyller rutan står användaren på ståpunkten
+     * vänd mot clownen → position och riktning kända utan GPS, kompass
+     * eller markördetektion. "Starta AR" låser kalibreringen:
+     *   rotY = CLOWN_BEARING + kamerans gyro-yaw (siktlinjeformeln, α=0)
+     * Korsplattform: ingen WebXR/ARCore, inga chrome-flaggor.
+     *
+     * Ståpunkt + riktning läses från KALAS-raden i placements.csv:
+     *   KALAS,lat,lon,elev,bearing   (fallback: ANKAR + gatans bäring)
+     */
+    var PATH_BEARING  = 5.7010969;   /* fallback-riktning: gågatan söder→norr */
+    var VISIBILITY_HZ = 100;
+
+    var anchor        = null;
+    var kalas         = null;        /* {lat, lon, bearing} — ståpunkt + clownriktning */
+    var placedObjects = [];
+    var barriers      = [];
+    var modelDefaults = {};
+    var visTimer      = null;
+    var arActive      = false;
+    var csvLoaded     = false;
+    var camReady      = false;
+
+    var splash       = document.getElementById('splash');
+    var splashStatus = document.getElementById('splash-status');
+    var camHint      = document.getElementById('cam-hint');
+    var errorOverlay = document.getElementById('error-overlay');
+    var uiOverlay    = document.getElementById('ui-overlay');
+    var startBtn     = document.getElementById('start-kalas-btn');
+    var exitBtn      = document.getElementById('exit-ar-btn');
+    var recalBtn     = document.getElementById('recal-btn');
+    var cam          = document.getElementById('cam');
+    var camBox       = document.getElementById('cam-box');
+    var scene        = document.getElementById('ar-scene');
+    var assets       = document.getElementById('asset-manager');
+    var sceneRoot    = document.getElementById('scene-root');
+    var camEl        = document.querySelector('a-camera');
+
+    /* Felskyddsnät */
+    window.addEventListener('unhandledrejection', function (e) {
+      var msg = (e.reason && e.reason.message) ? e.reason.message : String(e.reason);
+      showError('Oväntat fel: ' + msg);
+    });
+
+    /* ── CSV-parser ── */
+    function parseCSV(text) {
+      var objectRows = [], sparrRows = [];
+      text.trim().split(/\r?\n/).forEach(function (line) {
+        line = line.trim();
+        if (!line || line.charAt(0) === '#') return;
+        var c = line.split(',').map(function (s) { return s.trim(); });
+        var nam = c[0];
+        if (nam.toLowerCase() === 'namn' || nam.toLowerCase() === 'name') return;
+        if (nam.toUpperCase().startsWith('SPARR_')) {
+          var la1=parseFloat(c[1]),lo1=parseFloat(c[2]),la2=parseFloat(c[3]),lo2=parseFloat(c[4]);
+          if (!isNaN(la1)&&!isNaN(la2)) sparrRows.push({namn:nam,lat1:la1,lon1:lo1,lat2:la2,lon2:lo2});
+        } else {
+          var lat=parseFloat(c[1]),lon=parseFloat(c[2]);
+          if (isNaN(lat)||isNaN(lon)) return;
+          objectRows.push({ namn:nam, lat:lat, lon:lon, elev:val(c[3]),
+            synligInom:val(c[4]), csvScale:parseScale(c[5]),
+            bearing:val(c[4]),
+            modelLoaded:false, arActive:false, currentlyVisible:false });
+        }
+      });
+      return { objectRows:objectRows, sparrRows:sparrRows };
+    }
+    function val(s) { return (s!==undefined&&s!=='') ? parseFloat(s) : null; }
+    function parseScale(s) {
+      if (!s||s.trim()==='') return null; s=s.trim();
+      return s.split(/\s+/).length===1 ? s+' '+s+' '+s : s;
+    }
+
+    function surveyOffset(anc, lat, lon, elev) {
+      var R = 6378137;
+      var dLat = (lat - anc.lat) * Math.PI / 180;
+      var dLon = (lon - anc.lon) * Math.PI / 180;
+      var midLat = ((lat + anc.lat) / 2) * Math.PI / 180;
+      return { x: dLon * Math.cos(midLat) * R,
+               y: (elev != null && anc.elev != null) ? (elev - anc.elev) : 0,
+               z: -dLat * R };
+    }
+
+    function buildBarriers(sparrRows) {
+      return sparrRows.map(function (row) {
+        var p1 = surveyOffset(anchor, row.lat1, row.lon1, null);
+        var p2 = surveyOffset(anchor, row.lat2, row.lon2, null);
+        return { ax:p1.x, az:p1.z, bx:p2.x, bz:p2.z };
+      });
+    }
+
+    function getScale(obj) {
+      if (obj.csvScale) return obj.csvScale;
+      if (modelDefaults[obj.namn]&&modelDefaults[obj.namn].scale) return modelDefaults[obj.namn].scale;
+      return '1 1 1';
+    }
+
+    function posStr(x, y, z) { return x.toFixed(3)+' '+y.toFixed(3)+' '+z.toFixed(3); }
+
+    /* ── Bygg scen ── */
+    function buildScene() {
+      placedObjects.forEach(function (obj, idx) {
+        var off = obj.offset, assetId = 'kalas-asset-' + idx;
+        var ai = document.createElement('a-asset-item');
+        ai.setAttribute('id', assetId);
+        ai.setAttribute('src', 'assets/models/' + obj.namn);
+        assets.appendChild(ai);
+
+        var box = document.createElement('a-box');
+        box.setAttribute('id', 'box-' + idx);
+        box.setAttribute('color', '#ff6b9d');
+        box.setAttribute('opacity', '0.85');
+        box.setAttribute('position', posStr(off.x, off.y + 0.5, off.z));
+        box.setAttribute('visible', 'false');
+        sceneRoot.appendChild(box);
+
+        var model = document.createElement('a-gltf-model');
+        model.setAttribute('id', 'model-' + idx);
+        model.setAttribute('src', '#' + assetId);
+        model.setAttribute('position', posStr(off.x, off.y, off.z));
+        model.setAttribute('scale', getScale(obj));
+        model.setAttribute('visible', 'false');
+        model.addEventListener('model-loaded', function () {
+          obj.modelLoaded = true;
+          if (obj.arActive && obj.currentlyVisible) {
+            box.setAttribute('visible', 'false');
+            model.setAttribute('visible', 'true');
+          }
+        });
+        sceneRoot.appendChild(model);
+      });
+    }
+
+    /* ── Synlighet (kameran fixerad i origo = ståpunkten) ── */
+    function segmentsIntersect(p1x,p1z,p2x,p2z,p3x,p3z,p4x,p4z) {
+      var d1x=p2x-p1x,d1z=p2z-p1z,d2x=p4x-p3x,d2z=p4z-p3z;
+      var cross=d1x*d2z-d1z*d2x;
+      if(Math.abs(cross)<1e-10) return false;
+      var dx=p3x-p1x,dz=p3z-p1z;
+      var t=(dx*d2z-dz*d2x)/cross,u=(dx*d1z-dz*d1x)/cross;
+      return t>0&&t<1&&u>0&&u<1;
+    }
+
+    function updateVisibility() {
+      var camPos = { x: 0, z: 0 };
+      placedObjects.forEach(function (obj, idx) {
+        var s = checkVisible(camPos, obj);
+        if (s === obj.currentlyVisible) return;
+        obj.currentlyVisible = s; applyVisibility(idx, obj, s);
+      });
+    }
+
+    function checkVisible(camPos, obj) {
+      var off = obj.offset;
+      if (obj.synligInom !== null) {
+        var dx = camPos.x - off.x, dz = camPos.z - off.z;
+        if (Math.sqrt(dx*dx + dz*dz) > obj.synligInom) return false;
+      }
+      for (var i = 0; i < barriers.length; i++) {
+        var b = barriers[i];
+        if (segmentsIntersect(camPos.x, camPos.z, off.x, off.z, b.ax, b.az, b.bx, b.bz)) return false;
+      }
+      return true;
+    }
+
+    function applyVisibility(idx, obj, show) {
+      var m = document.getElementById('model-' + idx), b = document.getElementById('box-' + idx);
+      if (show) { if (obj.modelLoaded) { m.setAttribute('visible','true'); b.setAttribute('visible','false'); }
+                  else { b.setAttribute('visible','true'); } }
+      else { m.setAttribute('visible','false'); b.setAttribute('visible','false'); }
+    }
+
+    /* ── Laddning ── */
+    Promise.all([
+      fetch('config.json').then(function (r) {
+        if (!r.ok) throw new Error('config.json saknas'); return r.json();
+      }),
+      fetch('assets/placements.csv').then(function (r) {
+        if (!r.ok) throw new Error('placements.csv saknas'); return r.text();
+      })
+    ]).then(function (results) {
+      modelDefaults = results[0].modelDefaults || {};
+      var parsed    = parseCSV(results[1]);
+
+      anchor = parsed.objectRows.find(function (r) { return r.namn.toUpperCase() === 'ANKAR'; });
+      if (!anchor) { showError('Ingen ANKAR-rad i placements.csv.'); return; }
+
+      /* Ståpunkt + clownriktning: KALAS-raden, annars ANKAR + gatans bäring */
+      var kalasRow = parsed.objectRows.find(function (r) { return r.namn.toUpperCase() === 'KALAS'; });
+      if (kalasRow) {
+        kalas = { lat: kalasRow.lat, lon: kalasRow.lon,
+                  bearing: (kalasRow.bearing !== null ? kalasRow.bearing : PATH_BEARING) };
+      } else {
+        kalas = { lat: anchor.lat, lon: anchor.lon, bearing: PATH_BEARING };
+      }
+
+      placedObjects = parsed.objectRows
+        .filter(function (r) {
+          return r.namn.toUpperCase() !== 'ANKAR' && r.namn.toUpperCase() !== 'KALAS' &&
+                 !r.namn.toLowerCase().endsWith('.png');
+        })
+        .map(function (r) { r.offset = surveyOffset(anchor, r.lat, r.lon, r.elev); return r; });
+
+      /* Flytta världen så att STÅPUNKTEN blir origo (exakt, inmätt — ej GPS) */
+      var staOff = surveyOffset(anchor, kalas.lat, kalas.lon, null);
+      placedObjects.forEach(function (obj) {
+        obj.offset.x -= staOff.x;
+        obj.offset.z -= staOff.z;
+      });
+
+      barriers = buildBarriers(parsed.sparrRows);
+      barriers.forEach(function (bar) {
+        bar.ax -= staOff.x; bar.az -= staOff.z;
+        bar.bx -= staOff.x; bar.bz -= staOff.z;
+      });
+
+      buildScene();
+      csvLoaded = true;
+      checkReady();
+    }).catch(function (err) { showError('Laddningsfel: ' + err.message); });
+
+    /* ── Kameraförhandsvisning (startar direkt) ── */
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    }).then(function (stream) {
+      cam.srcObject = stream;
+      camHint.classList.add('hidden');
+      camReady = true;
+      checkReady();
+    }).catch(function () {
+      camHint.textContent = 'Kameran nekades – tillåt kamera i webbläsarens inställningar och ladda om sidan.';
+    });
+
+    function checkReady() {
+      if (csvLoaded && camReady) {
+        startBtn.classList.add('enabled');
+        splashStatus.textContent = '';
+      }
+    }
+
+    /* Väntar på första deviceorientation-händelsen (iOS: kommer först
+       efter tillståndsklicket) så att gyro-yaw är färskt vid kalibrering */
+    function waitForOrientation() {
+      return new Promise(function (resolve) {
+        var done = false;
+        function finish() { if (!done) { done = true; resolve(); } }
+        window.addEventListener('deviceorientation', finish, { once: true });
+        setTimeout(finish, 600);
+      });
+    }
+
+    /* ── Starta AR: lås kalibreringen ur clown-inpassningen ── */
+    startBtn.addEventListener('click', async function () {
+      startBtn.classList.remove('enabled');
+      splashStatus.textContent = 'Startar...';
+
+      /* iOS 13+: rörelsetillstånd måste begäras i klicket */
+      if (typeof DeviceOrientationEvent !== 'undefined' &&
+          typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+          var perm = await DeviceOrientationEvent.requestPermission();
+          if (perm !== 'granted') {
+            showError('Rörelsetillstånd krävs för AR. Ladda om och tillåt.');
+            return;
+          }
+        } catch (e) { /* ignorera */ }
+      }
+
+      await waitForOrientation();
+      /* Extra frame så look-controls hunnit applicera orienteringen */
+      await new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); });
+
+      /* Kalibrering: användaren är vänd mot clownen (centrerad i rutan).
+         Siktlinjeformeln med α = 0: rotY = clownbäring + kamerans yaw. */
+      var psi  = camEl.object3D.rotation.y * 180 / Math.PI;
+      var rotY = kalas.bearing + psi;
+      sceneRoot.setAttribute('rotation', '0 ' + rotY.toFixed(2) + ' 0');
+      console.log('[Kalas] Kalibrering: bearing', kalas.bearing, 'psi', psi.toFixed(1), 'rotY', rotY.toFixed(1));
+
+      /* Växla till AR-läge: video fullskärm, splash bort */
+      document.body.appendChild(cam);          /* flytta ut ur cam-box */
+      cam.classList.remove('boxed');
+      cam.classList.add('fullscreen');
+      splash.classList.add('hidden');
+      uiOverlay.classList.remove('hidden');
+
+      arActive = true;
+      placedObjects.forEach(function (obj) { obj.arActive = true; });
+      visTimer = setInterval(updateVisibility, VISIBILITY_HZ);
+    });
+
+    /* Passa in clownen igen: tillbaka till splash-läget (omkalibrering) */
+    recalBtn.addEventListener('click', function () {
+      clearInterval(visTimer);
+      arActive = false;
+      cam.classList.remove('fullscreen');
+      cam.classList.add('boxed');
+      camBox.insertBefore(cam, camBox.firstChild);
+      uiOverlay.classList.add('hidden');
+      splash.classList.remove('hidden');
+      startBtn.classList.add('enabled');
+      splashStatus.textContent = '';
+    });
+
+    exitBtn.addEventListener('click', function () {
+      clearInterval(visTimer);
+      if (cam.srcObject) cam.srcObject.getTracks().forEach(function (t) { t.stop(); });
+      window.location.reload();
+    });
+
+    function showError(msg) {
+      splash.classList.add('hidden');
+      document.getElementById('error-message').textContent = msg;
+      errorOverlay.classList.remove('hidden');
+    }
+  </script>
 </body>
 </html>
