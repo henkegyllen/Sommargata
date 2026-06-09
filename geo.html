@@ -6,6 +6,30 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Sommargatan – GEO (GPS+kompass, iPhone walk)</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+
+  <!--
+    Kompassdämpning. look-controls skriver kamerans orientering RÅTT från
+    magnetometern varje frame → jitter. Denna komponent glättar med ett
+    exponentiellt slerp-filter (ligger efter look-controls i tick-ordningen).
+      factor  – glättning för smårörelser (lägre = lugnare, men trögare)
+      snapDeg – över denna vinkeländring antas en MEDVETEN vändning → släpp
+                igenom snabbt (responsivt), så att stora vridningar ej laggar.
+  -->
+  <script>
+    AFRAME.registerComponent('smooth-orientation', {
+      schema: { factor: { default: 0.12 }, snapDeg: { default: 25 } },
+      init: function () { this.q = new THREE.Quaternion(); this.first = true; },
+      tick: function () {
+        var cur = this.el.object3D.quaternion;
+        if (this.first) { this.q.copy(cur); this.first = false; return; }
+        var angle = this.q.angleTo(cur) * 180 / Math.PI;
+        var f = angle > this.data.snapDeg ? 0.5 : this.data.factor;
+        this.q.slerp(cur, f);
+        cur.copy(this.q);
+      }
+    });
+  </script>
+
   <!-- AR.js location-based (new-location-based): gps-new-camera / gps-new-entity-place.
        Geo-förankrar innehåll mot lat/lon via GPS + magnetometer. Ren iOS Safari,
        ingen app, MIT/gratis. Grov precision (~5 m, hoppig) — research-rekommenderad
@@ -85,7 +109,8 @@
     renderer="antialias: true; colorManagement: true"
     loading-screen="enabled: false">
     <a-assets id="asset-manager" timeout="30000"></a-assets>
-    <a-camera gps-new-camera="gpsMinDistance: 4" rotation-reader></a-camera>
+    <a-camera gps-new-camera="gpsMinDistance: 4" rotation-reader
+              smooth-orientation="factor: 0.12; snapDeg: 25"></a-camera>
   </a-scene>
 
   <script>
