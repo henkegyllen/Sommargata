@@ -5,7 +5,34 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#1a1a2e">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Kalasvärlden – Sommargatan Växjö</title>
+
+  <!--
+    Versionshandskakning – tvingar iOS Safari att ladda senaste sidan.
+    APP_VERSION måste matcha version.json. Vid varje skarp ändring: höj BÅDA.
+    Hämtar version.json utan cache; är sidan äldre laddas den om med ny
+    URL-parameter (egen URL → Safari måste hämta färsk HTML).
+  -->
+  <script>
+    var APP_VERSION = '2026-06-09a';
+    (function () {
+      try {
+        fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (d && d.version && d.version !== APP_VERSION &&
+                location.search.indexOf('v=' + d.version) === -1) {
+              location.replace(location.pathname + '?v=' + d.version);
+            }
+          })
+          .catch(function () { /* offline: kör vidare med cachad version */ });
+      } catch (e) { /* ignorera */ }
+    })();
+  </script>
+
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <link rel="stylesheet" href="css/ui.css">
   <style>
@@ -45,7 +72,7 @@
     }
     #splash .instruction { font-size: 1.05rem; color: #ffd93d; margin: 0; font-weight: bold; }
     #cam-box {
-      width: min(78vw, 340px); aspect-ratio: 3 / 4;
+      width: min(62vw, 272px); aspect-ratio: 3 / 4;   /* ~20 % smalare: tvingar rakt framför clownen */
       border: 4px dashed #ff6b9d; border-radius: 20px;
       overflow: hidden; position: relative; background: #000;
     }
@@ -68,6 +95,9 @@
       color: #1a1a2e; text-decoration: none; font-size: 0.75rem;
       margin-top: 8px; padding: 10px 30px;   /* generös träffyta */
     }
+    /* Versionsstämpel: nästan osynlig för allmänheten, läsbar på nära håll
+       för oss vid test — visar vilken kodversion som faktiskt laddats */
+    #version-stamp { color: #26263a; font-size: 0.62rem; font-family: monospace; }
 
     /* ── AR-läge ── */
     #ui-overlay {
@@ -111,7 +141,7 @@
 
   <div id="splash">
     <h1>Välkommen till kalasvärlden</h1>
-    <p class="instruction">Passa in clownen i rutan</p>
+    <p class="instruction">Passa in <u>hela</u> clownen i rutan</p>
     <div id="cam-box">
       <video id="cam" class="boxed" autoplay playsinline muted></video>
       <div id="cam-hint">Startar kameran...</div>
@@ -119,6 +149,7 @@
     <button id="start-kalas-btn">&#127880; Starta AR</button>
     <div id="splash-status"></div>
     <a id="test-link" href="test.html">testingång</a>
+    <div id="version-stamp"></div>
   </div>
 
   <div id="error-overlay" class="hidden">
@@ -175,6 +206,12 @@
     var assets       = document.getElementById('asset-manager');
     var sceneRoot    = document.getElementById('scene-root');
     var camEl        = document.querySelector('a-camera');
+
+    /* Visa laddad kodversion (så vi vid test vet att rätt sida körs) */
+    (function () {
+      var vs = document.getElementById('version-stamp');
+      if (vs) vs.textContent = 'v' + APP_VERSION;
+    })();
 
     /* Felskyddsnät */
     window.addEventListener('unhandledrejection', function (e) {
