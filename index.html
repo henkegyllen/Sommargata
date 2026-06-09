@@ -118,6 +118,14 @@
     }
     #error-overlay h2 { color: #ff6b6b; margin: 0; }
     #error-overlay a  { color: #aaa; }
+    #ios-hint {
+      position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+      z-index: 1001; max-width: 86vw; text-align: center;
+      background: rgba(0,0,0,0.72); color: #fff; font-family: sans-serif;
+      font-size: 0.95rem; line-height: 1.45; padding: 12px 20px; border-radius: 12px;
+      pointer-events: none;
+    }
+    #ios-hint small { color: #ffd93d; font-size: 0.8rem; }
     .hidden { display: none !important; }
   </style>
 </head>
@@ -161,6 +169,12 @@
   <div id="ui-overlay" class="hidden">
     <button id="exit-ar-btn">&#10005; Avsluta</button>
     <button id="recal-btn">Passa in clownen igen &#8634;</button>
+  </div>
+
+  <!-- iOS-banner: utan positionsspårning fungerar bara "stå still + vrid dig" -->
+  <div id="ios-hint" class="hidden">
+    📍 Stå kvar på platsen och vrid dig för att titta runt.<br>
+    <small>På iPhone följer kalaset din blick – men inte dina steg.</small>
   </div>
 
   <script>
@@ -496,6 +510,13 @@
       cam.classList.add('fullscreen');
       splash.classList.add('hidden');
       uiOverlay.classList.remove('hidden');
+
+      /* iOS saknar positionsspårning (ingen WebXR) → modellerna kan inte
+         hållas världsfasta när man GÅR, bara när man vrider sig. Styr
+         beteendet med en banner i några sekunder. */
+      var iosHint = document.getElementById('ios-hint');
+      iosHint.classList.remove('hidden');
+      setTimeout(function () { iosHint.classList.add('hidden'); }, 7000);
 
       arActive = true;
       placedObjects.forEach(function (obj) { obj.arActive = true; });
