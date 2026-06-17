@@ -103,15 +103,19 @@
 
   <!-- Scenen MÅSTE vara synlig vid init: AR.js mäter videostorleken vid
        sidladdning. Var den display:none blev videoytan 0x0 → vit bakgrund.
-       Startskärmen (z-index 9999, opak) täcker scenen tills man trycker. -->
+       Startskärmen (z-index 9999, opak) täcker scenen tills man trycker.
+
+       INGEN videoTexture: det läget renderade vitt på testenheten OCH bröt
+       AR.js uppdateringsloop (kameran följde ej GPS). Klassiskt läge =
+       DOM-video bakom + genomskinlig duk (renderer alpha:true) = beprövat. -->
   <a-scene
     id="ar-scene"
     vr-mode-ui="enabled: false"
-    arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false"
-    renderer="antialias: true"
+    arjs="sourceType: webcam; debugUIEnabled: false"
+    renderer="antialias: true; alpha: true"
     loading-screen="enabled: false">
     <a-assets id="asset-manager" timeout="30000"></a-assets>
-    <a-camera gps-new-camera="gpsMinDistance: 4" rotation-reader
+    <a-camera gps-new-camera="gpsMinDistance: 2" rotation-reader
               smooth-orientation="factor: 0.12; snapDeg: 25"></a-camera>
   </a-scene>
 
