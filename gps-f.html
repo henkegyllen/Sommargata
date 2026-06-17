@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Sommargatan – Metod F (multi-markör-resektion)</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <!-- PD behöver CV (cv.js) + AR (aruco.js); ej Posit/SVD i Metod F -->
+  <script src="https://unpkg.com/js-aruco2@2.0.0/src/cv.js"></script>
+  <script src="https://unpkg.com/js-aruco2@2.0.0/src/aruco.js"></script>
+  <script src="js/pictogram-detector.js"></script>
+  <script src="js/resection.js"></script>
+  <link rel="stylesheet" href="css/ui.css">
+  <style>
+    html, body { margin: 0; overflow: hidden; background: #000; }
+    #cam { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; pointer-events: none; }
+    #overlay { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
+    #ar-scene { position: fixed !important; inset: 0 !important; z-index: 1 !important; }
+    #ar-scene .a-canvas, canvas.a-canvas { pointer-events: none !important; }
+    #start-screen {
+      position: fixed; inset: 0; background: #1a1a2e; color: #fff;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; z-index: 9999; padding: 32px; text-align: center; font-family: sans-serif;
+    }
+    #start-screen h2 { margin: 0; font-size: 1.4rem; }
+    .method-badge { background: #8a1a6b; color: #fff; font-size: 0.8rem; padding: 4px 12px; border-radius: 20px; letter-spacing: 0.5px; }
+    .method-desc { font-size: 0.85rem; color: #9999bb; max-width: 320px; line-height: 1.5; }
+    .status-row { font-size: 0.95rem; padding: 9px 16px; background: rgba(255,255,255,0.08); border-radius: 8px; min-width: 240px; }
+    .status-row.ready { color: #6dffb0; } .status-row.warn { color: #ffdd57; } .status-row.error { color: #ff6b6b; }
+    #start-btn {
+      padding: 14px 40px; font-size: 1.1rem; font-weight: bold; border: none; border-radius: 12px;
+      background: #8a1a6b; color: #fff; cursor: pointer; opacity: 0.45; pointer-events: none; transition: opacity 0.3s;
+    }
+    #start-btn.enabled { opacity: 1; pointer-events: all; }
+    #back-link { color: #888; text-decoration: none; font-size: 0.85rem; }
+    #ui-overlay {
+      position: fixed; top: 0; left: 0; right: 0; display: flex; flex-direction: column;
+      align-items: center; padding-top: 10px; gap: 6px; pointer-events: none; z-index: 1000;
+    }
+    #ui-top { width: 100%; display: flex; justify-content: space-between; padding: 0 14px; box-sizing: border-box; }
+    #ui-overlay button { pointer-events: all; padding: 8px 14px; border: none; border-radius: 8px; background: rgba(0,0,0,0.6); color: #fff; font-size: 0.85rem; }
+    #fix-label { font-family: monospace; font-size: 0.72rem; color: #fff; background: rgba(0,0,0,0.6); padding: 6px 10px; border-radius: 8px; max-width: 92vw; text-align: center; }
+    #fix-label.fix2 { color: #6dffb0; } #fix-label.fix1 { color: #ffdd57; } #fix-label.coast { color: #ff9b6b; }
+    #prompt {
+      position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%); z-index: 1003;
+      background: rgba(0,0,0,0.78); color: #fff; font-family: sans-serif; font-size: 1rem;
+      padding: 12px 20px; border-radius: 12px; max-width: 86vw; text-align: center; pointer-events: none;
+    }
+    #error-overlay { position: fixed; inset: 0; background: #1a1a2e; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; z-index: 99999; padding: 32px; text-align: center; font-family: sans-serif; }
+    #error-overlay h2 { color: #ff6b6b; margin: 0; } #error-overlay a { color: #aaa; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <video id="cam" autoplay playsinline muted></video>
+  <canvas id="proc" hidden></canvas>
+  <canvas id="overlay"></canvas>
+
+  <div id="start-screen">
+    <span class="method-badge">METOD F · MULTI-MARKÖR</span>
+    <h2>Sommargatan AR</h2>
+    <p class="method-desc">
+      Ser kameran ≥2 flaggor samtidigt löses position och riktning geometriskt
+      (decimeter, kompassfritt). Stå vid pyramiden, sikta mot clownen och tryck start.
+    </p>
+    <div id="load-status"    class="status-row warn">Laddar placements.csv...</div>
+    <div id="compass-status" class="status-row warn hidden">Söker rörelsesensor...</div>
+    <button id="start-btn">Starta AR</button>
+    <a href="test.html" id="back-link">&#8592; Tillbaka till testingång</a>
+  </div>
+
+  <div id="ui-overlay" class="hidden">
+    <div id="ui-top">
+      <button id="exit-btn">&#10005; Avsluta</button>
+      <button id="recal-btn">Kalibrera ljus ⊕</button>
+    </div>
+    <div id="fix-label">Startar...</div>
+  </div>
+
+  <div id="prompt" class="hidden">Titta mot en flagga</div>
+
+  <div id="error-overlay" class="hidden">
+    <h2>Fel</h2><p id="error-message"></p><a href="test.html">&#8592; Tillbaka</a>
+  </div>
+
+  <a-scene id="ar-scene" embedded
+    renderer="antialias: true; alpha: true; colorManagement: true"
+    background="transparent: true" vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false" loading-screen="enabled: false">
+    <a-assets id="asset-manager" timeout="30000"></a-assets>
+    <a-entity id="scene-root"></a-entity>
+    <a-entity id="cam-rig">
+      <a-camera look-controls="magicWindowTrackingEnabled: true; touchEnabled: false"
+                wasd-controls="enabled: false" position="0 0 0"></a-camera>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    /*
+     * Metod F — multi-markör-resektion. Världen är nordriktad (modeller på
+     * surveyOffset från ANKAR, scene-root oroterad). En kamera-RIGG bär kameran:
+     *   rig.position = löst kameravärldsläge;  rig.rotation.y = headingkorrektion.
+     * look-controls (magicWindow) sköter vridning/lutning via gyro; resektions-
+     * fixar korrigerar riggens position och headingoffset (lerp). Kompassfritt
+     * vid ≥2 flaggor. Egen video + transparent A-Frame → ingen AR.js-bugg.
+     */
+    var HFOV_DEG       = 65;     /* antaget horisontellt synfält → focalPx (fälttrimmas) */
+    var MARKER_SIZE_M  = 0.50;   /* flaggans fysiska bredd */
+    var SPREAD_MAX_M   = 1.5;    /* ≥2-fix accepteras om estimat-spridning < detta */
+    var PROMPT_MS      = 10000;  /* tid utan flagga innan "Titta mot en flagga" */
+    var LERP           = 0.18;   /* mjukhet i rig-korrektion */
+    var GROUND_ELEV    = 105.00;
+    var PATH_BEARING   = 5.7010969;
+
+    var anchor = null, kalas = null, placedObjects = [], modelDefaults = {};
+    var flagWorld = {};          /* namn → {x,z} */
+    var csvReady = false, arActive = false, calibrated = false;
+    var procW = 640, procH = 480, focalPx = 0;
+    var lastDetectMs = 0, lastFlagMs = 0;
+    var rigPos = {x:0, z:0}, rigPosT = {x:0, z:0};
+    var rigYaw = 0, rigYawT = 0, initialDone = false;
+    var manualPointMode = false, greenBoxUntil = 0;
+
+    var V = document.getElementById('cam');
+    var proc = document.getElementById('proc'); var pctx = proc.getContext('2d');
+    var overlay = document.getElementById('overlay'); var octx = overlay.getContext('2d');
+    var startScreen = document.getElementById('start-screen');
+    var loadStatus = document.getElementById('load-status');
+    var compassStatus = document.getElementById('compass-status');
+    var startBtn = document.getElementById('start-btn');
+    var uiOverlay = document.getElementById('ui-overlay');
+    var fixLabel = document.getElementById('fix-label');
+    var promptEl = document.getElementById('prompt');
+    var scene = document.getElementById('ar-scene');
+    var assets = document.getElementById('asset-manager');
+    var sceneRoot = document.getElementById('scene-root');
+    var camRig = document.getElementById('cam-rig');
+    var camEl = document.querySelector('a-camera');
+
+    var compassHeading = null;   /* rå, endast för status/initiering */
+    window.addEventListener('unhandledrejection', function (e) {
+      showError('Oväntat fel: ' + ((e.reason && e.reason.message) || e.reason));
+    });
+    window.addEventListener('deviceorientationabsolute', function (e) {
+      if (e.alpha !== null) { compassHeading = e.alpha; compassStatus.textContent = 'Rörelsesensor ✓'; compassStatus.className = 'status-row ready'; }
+    });
+    window.addEventListener('deviceorientation', function (e) {
+      if (compassHeading === null && e.alpha !== null) { compassHeading = e.alpha; compassStatus.textContent = 'Rörelsesensor ✓'; compassStatus.className = 'status-row ready'; }
+    });
+
+    /* ── CSV ── */
+    function parseCSV(text) {
+      var rows = [], sparr = [];
+      text.trim().split(/\r?\n/).forEach(function (line) {
+        line = line.trim(); if (!line || line.charAt(0) === '#') return;
+        var c = line.split(',').map(function (s) { return s.trim(); });
+        var nam = c[0]; if (nam.toLowerCase() === 'namn' || nam.toLowerCase() === 'name') return;
+        if (nam.toUpperCase().startsWith('SPARR_')) return;
+        var lat = parseFloat(c[1]), lon = parseFloat(c[2]); if (isNaN(lat) || isNaN(lon)) return;
+        rows.push({ namn: nam, lat: lat, lon: lon, elev: val(c[3]),
+          col4: val(c[4]), csvScale: parseScale(c[5]) });
+      });
+      return rows;
+    }
+    function val(s) { return (s !== undefined && s !== '') ? parseFloat(s) : null; }
+    function parseScale(s) { if (!s || s.trim() === '') return null; s = s.trim(); return s.split(/\s+/).length === 1 ? s+' '+s+' '+s : s; }
+    function surveyOffset(anc, lat, lon, elev) {
+      var R = 6378137, dLat = (lat-anc.lat)*Math.PI/180, dLon = (lon-anc.lon)*Math.PI/180, midLat = ((lat+anc.lat)/2)*Math.PI/180;
+      return { x: dLon*Math.cos(midLat)*R, y: (elev!=null&&anc.elev!=null)?(elev-anc.elev):0, z: -dLat*R };
+    }
+    function getScale(o) { if (o.csvScale) return o.csvScale; if (modelDefaults[o.namn]&&modelDefaults[o.namn].scale) return modelDefaults[o.namn].scale; return '1 1 1'; }
+    function posStr(x,y,z) { return x.toFixed(3)+' '+y.toFixed(3)+' '+z.toFixed(3); }
+
+    function buildScene() {
+      placedObjects.forEach(function (o, i) {
+        var off = o.offset, id = 'f-asset-'+i;
+        var ai = document.createElement('a-asset-item'); ai.setAttribute('id', id); ai.setAttribute('src', 'assets/models/'+o.namn); assets.appendChild(ai);
+        var m = document.createElement('a-gltf-model'); m.setAttribute('src', '#'+id);
+        m.setAttribute('position', posStr(off.x, off.y, off.z)); m.setAttribute('scale', getScale(o));
+        sceneRoot.appendChild(m);
+      });
+    }
+
+    Promise.all([
+      fetch('config.json').then(function (r) { return r.ok ? r.json() : {}; }),
+      fetch('assets/placements.csv').then(function (r) { if (!r.ok) throw new Error('placements.csv saknas'); return r.text(); })
+    ]).then(function (res) {
+      modelDefaults = (res[0] && res[0].modelDefaults) || {};
+      var rows = parseCSV(res[1]);
+      anchor = rows.find(function (r) { return r.namn.toUpperCase()==='ANKAR'; });
+      if (!anchor) throw new Error('Ingen ANKAR-rad');
+      var kr = rows.find(function (r) { return r.namn.toUpperCase()==='KALAS'; });
+      kalas = kr ? { lat:kr.lat, lon:kr.lon, bearing: kr.col4!=null?kr.col4:PATH_BEARING } : { lat:anchor.lat, lon:anchor.lon, bearing:PATH_BEARING };
+
+      /* Flaggornas världslägen (PNG-rader, ej Pyramid) → resektionsreferens */
+      rows.filter(function (r) { return r.namn.toLowerCase().endsWith('.png') && r.namn.toUpperCase()!=='PYRAMID.PNG'; })
+          .forEach(function (r) { var o = surveyOffset(anchor, r.lat, r.lon, null); flagWorld[r.namn] = { x:o.x, z:o.z }; });
+
+      placedObjects = rows.filter(function (r) {
+        return ['ANKAR','KALAS'].indexOf(r.namn.toUpperCase())===-1 && !r.namn.toLowerCase().endsWith('.png');
+      }).map(function (r) { r.offset = surveyOffset(anchor, r.lat, r.lon, r.elev); return r; });
+
+      buildScene();
+
+      /* Ladda flaggmallar för identifiering (samma som C/D) */
+      PD.load(Object.keys(flagWorld).map(function (n) { return { name:n, url:'assets/markers/'+n }; }), function (err) {
+        if (err) { showError('Mallbild: '+err); return; }
+        loadStatus.textContent = placedObjects.length+' objekt, '+Object.keys(flagWorld).length+' flaggor ✓';
+        loadStatus.className = 'status-row ready';
+        compassStatus.classList.remove('hidden');
+        csvReady = true; startBtn.classList.add('enabled');
+      });
+    }).catch(function (e) { showError('Laddningsfel: '+e.message); });
+
+    /* ── px → skärm-mappning (object-fit: cover) för overlay-rutor ── */
+    function pxToScreen(px, py) {
+      var sw = window.innerWidth, sh = window.innerHeight;
+      var scale = Math.max(sw/procW, sh/procH);
+      var ox = (sw - procW*scale)/2, oy = (sh - procH*scale)/2;
+      return { x: px*scale+ox, y: py*scale+oy };
+    }
+    function drawBoxes(dets, green) {
+      octx.clearRect(0,0,overlay.width,overlay.height);
+      octx.lineWidth = 3; octx.font = '14px monospace';
+      dets.forEach(function (d) {
+        octx.strokeStyle = green ? '#00ff66' : 'rgba(255,255,255,0.8)';
+        octx.fillStyle = octx.strokeStyle;
+        octx.beginPath();
+        d.corners.forEach(function (c, i) { var s = pxToScreen(c.x, c.y); i?octx.lineTo(s.x,s.y):octx.moveTo(s.x,s.y); });
+        octx.closePath(); octx.stroke();
+        var c0 = pxToScreen(d.centroid.x, d.centroid.y);
+        octx.fillText(d.name.replace('.png','').replace('Bild_','#')+' '+Math.round(d.score*100)+'%', c0.x-20, c0.y);
+      });
+    }
+
+    /* Kamerans nuvarande världs-heading (grader CW från norr) ur blickriktningen */
+    function currentHeading() {
+      var v = new THREE.Vector3(); camEl.object3D.getWorldDirection(v);
+      return ((Math.atan2(v.x, -v.z)*180/Math.PI) % 360 + 360) % 360;
+    }
+    function angDiff(a, b) { var d = ((b-a)%360+540)%360-180; return d; }
+
+    /* ── Detektions- och rigg-loop ── */
+    function tick() {
+      if (arActive) {
+        /* Rigg lerp:ar mot mål varje frame (mjuk korrektion) */
+        rigPos.x += (rigPosT.x - rigPos.x)*LERP; rigPos.z += (rigPosT.z - rigPos.z)*LERP;
+        rigYaw += angDiff(rigYaw, rigYawT)*LERP;
+        camRig.object3D.position.set(rigPos.x, 1.6, rigPos.z);
+        camRig.object3D.rotation.y = rigYaw*Math.PI/180;
+      }
+      var now = Date.now();
+      if (arActive && now - lastDetectMs > 100 && V.readyState >= V.HAVE_ENOUGH_DATA && PD.isReady()) {
+        lastDetectMs = now;
+        if (V.videoWidth && proc.width !== V.videoWidth) {
+          procW = V.videoWidth; procH = V.videoHeight; proc.width = procW; proc.height = procH;
+          focalPx = (procW/2) / Math.tan(HFOV_DEG/2*Math.PI/180);
+        }
+        pctx.drawImage(V, 0, 0, procW, procH);
+        var img = pctx.getImageData(0, 0, procW, procH);
+        var dets = PD.detect(img).filter(function (d) { return flagWorld[d.name]; });
+
+        /* Overlay-rutor: testläge alltid; grön vid manuell utpekning */
+        var green = now < greenBoxUntil;
+        drawBoxes(dets, green);
+        if (manualPointMode && dets.length) {
+          /* Användaren bad om kalibrering → sampla pekad flagga, grön bekräftelse */
+          var d0 = dets[0];
+          var s = PD.sampleRegion(img, d0.centroid.x, d0.centroid.y, Math.max(10, d0.size/2));
+          if (PD.calibrate(s)) { calibrated = true; manualPointMode = false; greenBoxUntil = now + 1500; promptEl.classList.add('hidden'); }
+        }
+
+        if (dets.length) lastFlagMs = now;
+        applyFix(dets, img, now);
+      }
+      requestAnimationFrame(tick);
+    }
+
+    function applyFix(dets, img, now) {
+      var flags = dets.map(function (d) {
+        var w = flagWorld[d.name];
+        return { x:w.x, z:w.z, centroidX:d.centroid.x, pixelWidth:d.size, realWidth:MARKER_SIZE_M };
+      });
+
+      if (flags.length >= 2) {
+        var r = Resection.solve2plus(flags, focalPx, procW/2);
+        if (r.spread < SPREAD_MAX_M) {
+          rigPosT.x = r.pos.x; rigPosT.z = r.pos.z;
+          rigYawT += angDiff(currentHeading(), r.heading);   /* korrigera headingoffset */
+          fixLabel.textContent = 'FIX ◆2+ ('+flags.length+' flaggor) spread '+r.spread.toFixed(2)+' m · head '+Math.round(r.heading)+'°';
+          fixLabel.className = 'fix2';
+        }
+        /* Löpande ljus-omsampling vid säker fix (bästa flaggan) */
+        if (dets[0].score > 0.85) PD.calibrate(PD.sampleRegion(img, dets[0].centroid.x, dets[0].centroid.y, Math.max(10, dets[0].size/2)));
+      } else if (flags.length === 1) {
+        var r1 = Resection.solve1(flags[0], focalPx, procW/2, currentHeading());
+        rigPosT.x = r1.pos.x; rigPosT.z = r1.pos.z;
+        fixLabel.textContent = 'FIX ◇1 ('+dets[0].name.replace('.png','')+') · riktning gyro';
+        fixLabel.className = 'fix1';
+      } else {
+        if (now - lastFlagMs > PROMPT_MS) {
+          fixLabel.textContent = 'COAST – ingen flagga'; fixLabel.className = 'coast';
+          promptEl.classList.remove('hidden'); manualPointMode = true;
+        }
+      }
+    }
+
+    /* ── Start ── */
+    startBtn.addEventListener('click', async function () {
+      if (!csvReady) return; startBtn.classList.remove('enabled');
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try { await DeviceOrientationEvent.requestPermission(); } catch (e) {}
+      }
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        try { await DeviceMotionEvent.requestPermission(); } catch (e) {}
+      }
+      try {
+        var stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode:'environment', width:{ideal:1280}, height:{ideal:720} } });
+        V.srcObject = stream;
+      } catch (e) { showError('Kameran nekades: '+e.message); return; }
+
+      overlay.width = window.innerWidth; overlay.height = window.innerHeight;
+
+      /* Initial rigg = KALAS-ståpunkten; heading riktas vid första sensorvärdet */
+      var sp = surveyOffset(anchor, kalas.lat, kalas.lon, null);
+      rigPos = { x:sp.x, z:sp.z }; rigPosT = { x:sp.x, z:sp.z };
+      lastFlagMs = Date.now();
+      arActive = true;
+      startScreen.style.display = 'none';
+      uiOverlay.classList.remove('hidden');
+
+      /* Clown-scan: sampla bildmitten (clownen fyller rutan) → färgkalibrering */
+      setTimeout(function () {
+        if (V.videoWidth) {
+          procW = V.videoWidth; procH = V.videoHeight; proc.width=procW; proc.height=procH;
+          focalPx = (procW/2)/Math.tan(HFOV_DEG/2*Math.PI/180);
+          pctx.drawImage(V, 0, 0, procW, procH);
+          var s = PD.sampleRegion(pctx.getImageData(0,0,procW,procH), procW/2, procH/2, Math.min(procW,procH)/4);
+          if (PD.calibrate(s)) calibrated = true;
+        }
+        /* Initial heading: anta att användaren tittar mot clownen (kalas.bearing) */
+        rigYaw = angDiff(currentHeading(), kalas.bearing); rigYawT = rigYaw; initialDone = true;
+        requestAnimationFrame(tick);
+      }, 400);
+    });
+
+    document.getElementById('recal-btn').addEventListener('click', function () {
+      manualPointMode = true; promptEl.textContent = 'Sikta mot en flagga'; promptEl.classList.remove('hidden');
+    });
+    document.getElementById('exit-btn').addEventListener('click', function () {
+      arActive = false; if (V.srcObject) V.srcObject.getTracks().forEach(function (t){t.stop();});
+      window.location.href = 'test.html';
+    });
+    window.addEventListener('resize', function () { overlay.width = window.innerWidth; overlay.height = window.innerHeight; });
+
+    function showError(msg) { startScreen.classList.add('hidden'); document.getElementById('error-message').textContent = msg; document.getElementById('error-overlay').classList.remove('hidden'); }
+  </script>
+</body>
+</html>
