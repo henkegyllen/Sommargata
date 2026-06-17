@@ -101,12 +101,14 @@
     <div id="geo-label">GPS: –</div>
   </div>
 
+  <!-- Scenen MÅSTE vara synlig vid init: AR.js mäter videostorleken vid
+       sidladdning. Var den display:none blev videoytan 0x0 → vit bakgrund.
+       Startskärmen (z-index 9999, opak) täcker scenen tills man trycker. -->
   <a-scene
     id="ar-scene"
-    class="hidden"
     vr-mode-ui="enabled: false"
     arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false"
-    renderer="antialias: true; colorManagement: true"
+    renderer="antialias: true"
     loading-screen="enabled: false">
     <a-assets id="asset-manager" timeout="30000"></a-assets>
     <a-camera gps-new-camera="gpsMinDistance: 4" rotation-reader
@@ -205,6 +207,9 @@
       glbRows = parseCSV(res[1]);
       loadStatus.textContent = glbRows.length + ' modeller laddade ✓';
       loadStatus.className = 'status-row ready';
+      /* Bygg de geo-förankrade entiteterna direkt (scenen lever redan) */
+      if (scene.hasLoaded) buildGeoEntities();
+      else scene.addEventListener('loaded', buildGeoEntities);
       csvReady = true;
       startBtn.classList.add('enabled');
     }).catch(function (e) {
@@ -235,9 +240,8 @@
         try { await DeviceMotionEvent.requestPermission(); } catch (e) {}
       }
 
-      buildGeoEntities();
+      /* Scenen + kameran körs redan bakom startskärmen — avslöja dem bara */
       startScreen.classList.add('hidden');
-      scene.classList.remove('hidden');
       hud.classList.remove('hidden');
     });
 
