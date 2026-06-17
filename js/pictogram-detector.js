@@ -32,6 +32,12 @@ var PD = (function () {
   var warped    = null;    /* CV.Image: warpad kandidat */
   var binary    = [];      /* återanvänd buffert för findContours */
 
+  /* Referensrelativ färgkalibrering (Metod F): sätts från clown-scan / tap /
+     löpande omsampling. När satt klassas pixlar via avstånd till referens-
+     färgerna (ljustålig) istället för absoluta RGB-heuristiker. */
+  var refMag = null, refYel = null, calibTol2 = 0;
+  function sq(v) { return v * v; }
+
   /* ── Färgklassificering (belysningstolerant via kanalrelationer) ──
      Gul  RGB(249,225,128): B lägst, R≈G höga.
      Magenta RGB(179,58,132): G lägst, R högst. */
@@ -62,16 +68,29 @@ var PD = (function () {
     }
   }
 
+  /* Live-klassificering: 0=bakgrund, 1=magenta, 2=gul/yta.
+     Kalibrerad → närmaste-referens inom tolerans (ljustålig). Annars heuristik. */
+  function classifyLive(r, g, b) {
+    if (refMag) {
+      var dM = sq(r - refMag.r) + sq(g - refMag.g) + sq(b - refMag.b);
+      var dY = sq(r - refYel.r) + sq(g - refYel.g) + sq(b - refYel.b);
+      if (Math.min(dM, dY) > calibTol2) return 0;
+      return dM < dY ? 1 : 2;
+    }
+    if (isMagenta(r, g, b)) return 1;
+    if (isYellow(r, g, b) || isPale(r, g, b)) return 2;
+    return 0;
+  }
+
   /* Bygger båda kanalerna i ett svep över pixeldatat */
   function buildChannels(imageData) {
     var src = imageData.data;
     var n   = imageData.width * imageData.height;
     var m   = maskImg.data, q = magImg.data;
     for (var i = 0; i < n; i++) {
-      var r = src[i * 4], g = src[i * 4 + 1], b = src[i * 4 + 2];
-      var mag = isMagenta(r, g, b);
-      m[i] = (mag || isYellow(r, g, b) || isPale(r, g, b)) ? 255 : 0;
-      q[i] = mag ? 255 : 0;
+      var c = classifyLive(src[i * 4], src[i * 4 + 1], src[i * 4 + 2]);
+      m[i] = c !== 0 ? 255 : 0;
+      q[i] = c === 1 ? 255 : 0;
     }
   }
 
@@ -183,8 +202,18 @@ var PD = (function () {
         if (best && best.score >= MATCH_MIN && (best.score - second) >= MARGIN_MIN) {
           /* Rotera hörnordningen så corners[0] = mallens övre vänstra hörn */
           var aligned = helper.rotate2(cand, (4 - best.rotation) % 4);
+          /* Centroid + skenbar storlek (medel-kantlängd px) för resektion */
+          var cxp = 0, cyp = 0, k;
+          for (k = 0; k < 4; k++) { cxp += aligned[k].x; cyp += aligned[k].y; }
+          cxp /= 4; cyp /= 4;
+          var edge = 0;
+          for (k = 0; k < 4; k++) {
+            var p1 = aligned[k], p2 = aligned[(k + 1) % 4];
+            edge += Math.sqrt(sq(p2.x - p1.x) + sq(p2.y - p1.y));
+          }
           results.push({
             name: best.name, corners: aligned,
+            centroid: { x: cxp, y: cyp }, size: edge / 4,
             score: best.score, rotation: best.rotation
           });
         }
@@ -192,7 +221,45 @@ var PD = (function () {
 
       results.sort(function (a, b) { return b.score - a.score; });
       return results;
-    }
+    },
+
+    /*
+     * Sampla färgerna i en region (px-mitt + radie) ur en ImageData.
+     * Bucketar pixlarna i magenta vs gul/yta (via nuvarande klassificering)
+     * och returnerar medelfärgerna. Används av clown-scan, tap-to-sample och
+     * löpande omsampling. → { ok, magenta:{r,g,b}, yellow:{r,g,b} }
+     */
+    sampleRegion: function (imageData, px, py, radius) {
+      var w = imageData.width, h = imageData.height, src = imageData.data;
+      var x0 = Math.max(0, (px - radius) | 0), x1 = Math.min(w - 1, (px + radius) | 0);
+      var y0 = Math.max(0, (py - radius) | 0), y1 = Math.min(h - 1, (py + radius) | 0);
+      var mR = 0, mG = 0, mB = 0, mN = 0, yR = 0, yG = 0, yB = 0, yN = 0;
+      for (var y = y0; y <= y1; y++) {
+        for (var x = x0; x <= x1; x++) {
+          var i = (y * w + x) * 4, r = src[i], g = src[i + 1], b = src[i + 2];
+          var c = classifyLive(r, g, b);
+          if (c === 1) { mR += r; mG += g; mB += b; mN++; }
+          else if (c === 2) { yR += r; yG += g; yB += b; yN++; }
+        }
+      }
+      if (mN < 8 || yN < 8) return { ok: false };
+      return { ok: true,
+        magenta: { r: mR / mN, g: mG / mN, b: mB / mN },
+        yellow:  { r: yR / yN, g: yG / yN, b: yB / yN } };
+    },
+
+    /* Lås referensfärger (från sampleRegion-resultat). Toleransen sätts till
+       60 % av avståndet mellan referenserna → pixlar nära endera = flaggyta. */
+    calibrate: function (sample) {
+      if (!sample || !sample.ok) return false;
+      refMag = sample.magenta; refYel = sample.yellow;
+      var d2 = sq(refMag.r - refYel.r) + sq(refMag.g - refYel.g) + sq(refMag.b - refYel.b);
+      calibTol2 = sq(0.6) * d2;
+      return true;
+    },
+
+    isCalibrated: function () { return refMag !== null; },
+    getCalibration: function () { return refMag ? { magenta: refMag, yellow: refYel } : null; }
   };
 
 })();
