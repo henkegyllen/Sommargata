@@ -160,7 +160,10 @@ var PD = (function () {
       buildChannels(imageData);
 
       var contours   = CV.findContours(maskImg, binary);
-      var candidates = helper.findCandidates(contours, w * 0.10, 0.05, 8);
+      /* Min-storlek sänkt 0.10→0.035 av bildbredden: fälttest 2026-06-18 visade
+         att avlägsna flaggor (20–40 px) förkastades direkt → aldrig ≥2 samtidigt.
+         Magenta-andels- + matchningsvakterna sållar bort falska småkandidater. */
+      var candidates = helper.findCandidates(contours, w * 0.035, 0.05, 6);
       candidates     = helper.clockwiseCorners(candidates);
       candidates     = helper.notTooNear(candidates, 10);
 
