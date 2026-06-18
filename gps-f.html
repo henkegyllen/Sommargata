@@ -42,6 +42,7 @@
     #ui-overlay button { pointer-events: all; padding: 8px 14px; border: none; border-radius: 8px; background: rgba(0,0,0,0.6); color: #fff; font-size: 0.85rem; }
     #fix-label { font-family: monospace; font-size: 0.72rem; color: #fff; background: rgba(0,0,0,0.6); padding: 6px 10px; border-radius: 8px; max-width: 92vw; text-align: center; }
     #fix-label.fix2 { color: #6dffb0; } #fix-label.fix1 { color: #ffdd57; } #fix-label.coast { color: #ff9b6b; }
+    #geo-label { font-family: monospace; font-size: 0.72rem; color: #9bd3ff; background: rgba(0,0,0,0.6); padding: 6px 10px; border-radius: 8px; max-width: 92vw; text-align: center; }
     #prompt {
       position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%); z-index: 1003;
       background: rgba(0,0,0,0.78); color: #fff; font-family: sans-serif; font-size: 1rem;
@@ -77,6 +78,7 @@
       <button id="recal-btn">Kalibrera ljus ⊕</button>
     </div>
     <div id="fix-label">Startar...</div>
+    <div id="geo-label">GPS –</div>
   </div>
 
   <div id="prompt" class="hidden">Titta mot en flagga</div>
@@ -132,6 +134,8 @@
     var startBtn = document.getElementById('start-btn');
     var uiOverlay = document.getElementById('ui-overlay');
     var fixLabel = document.getElementById('fix-label');
+    var geoLabel = document.getElementById('geo-label');
+    var lastGPS = null;   /* {x,z,acc} i lokala meter (surveyOffset) — ground-truth i HUD */
     var promptEl = document.getElementById('prompt');
     var scene = document.getElementById('ar-scene');
     var assets = document.getElementById('asset-manager');
@@ -251,6 +255,12 @@
         camRig.object3D.position.set(rigPos.x, 1.6, rigPos.z);
         camRig.object3D.rotation.y = rigYaw*Math.PI/180;
       }
+      /* Ground-truth-rad: GPS (lokala meter) + rå kompass — kommer med i screenshots */
+      if (arActive) {
+        var g = lastGPS ? ('GPS ('+lastGPS.x.toFixed(1)+','+lastGPS.z.toFixed(1)+')m ±'+Math.round(lastGPS.acc)) : 'GPS –';
+        var k = compassHeading!=null ? (' · kompass '+Math.round(compassHeading)+'°') : '';
+        geoLabel.textContent = g + k;
+      }
       var now = Date.now();
       if (arActive && now - lastDetectMs > 100 && V.readyState >= V.HAVE_ENOUGH_DATA && PD.isReady()) {
         lastDetectMs = now;
@@ -289,7 +299,7 @@
         if (r.spread < SPREAD_MAX_M) {
           rigPosT.x = r.pos.x; rigPosT.z = r.pos.z;
           rigYawT += angDiff(currentHeading(), r.heading);   /* korrigera headingoffset */
-          fixLabel.textContent = 'FIX ◆2+ ('+flags.length+' flaggor) spread '+r.spread.toFixed(2)+' m · head '+Math.round(r.heading)+'°';
+          fixLabel.textContent = 'FIX ◆2+ ('+flags.length+'fl) pos('+r.pos.x.toFixed(1)+','+r.pos.z.toFixed(1)+') spread '+r.spread.toFixed(2)+'m head '+Math.round(r.heading)+'°';
           fixLabel.className = 'fix2';
         }
         /* Löpande ljus-omsampling vid säker fix (bästa flaggan) */
@@ -297,7 +307,7 @@
       } else if (flags.length === 1) {
         var r1 = Resection.solve1(flags[0], focalPx, procW/2, currentHeading());
         rigPosT.x = r1.pos.x; rigPosT.z = r1.pos.z;
-        fixLabel.textContent = 'FIX ◇1 ('+dets[0].name.replace('.png','')+') · riktning gyro';
+        fixLabel.textContent = 'FIX ◇1 ('+dets[0].name.replace('.png','')+') pos('+r1.pos.x.toFixed(1)+','+r1.pos.z.toFixed(1)+') · riktning gyro';
         fixLabel.className = 'fix1';
       } else {
         if (now - lastFlagMs > PROMPT_MS) {
@@ -327,6 +337,13 @@
       var sp = surveyOffset(anchor, kalas.lat, kalas.lon, null);
       rigPos = { x:sp.x, z:sp.z }; rigPosT = { x:sp.x, z:sp.z };
       lastFlagMs = Date.now();
+      /* GPS endast för diagnostik-HUD (ej positionering) — lokala meter via surveyOffset */
+      if (navigator.geolocation) {
+        navigator.geolocation.watchPosition(function (p) {
+          var o = surveyOffset(anchor, p.coords.latitude, p.coords.longitude, null);
+          lastGPS = { x:o.x, z:o.z, acc:p.coords.accuracy };
+        }, function () {}, { enableHighAccuracy: true });
+      }
       arActive = true;
       startScreen.style.display = 'none';
       uiOverlay.classList.remove('hidden');
