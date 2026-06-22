@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PD — detektor-självtest (magenta-först)</title>
+  <script src="https://unpkg.com/js-aruco2@2.0.0/src/cv.js"></script>
+  <script src="https://unpkg.com/js-aruco2@2.0.0/src/aruco.js"></script>
+  <script src="js/pictogram-detector.js"></script>
+  <style>
+    body { margin: 0; background: #14141f; color: #e8e8f0; font-family: sans-serif; padding: 16px; }
+    h1 { font-size: 1.1rem; }
+    p.note { color: #9999bb; font-size: 0.85rem; max-width: 760px; line-height: 1.5; }
+    .controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin: 14px 0; padding: 12px; background: #1e1e2e; border-radius: 10px; }
+    .controls label { font-size: 0.85rem; display: flex; gap: 6px; align-items: center; }
+    #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+    .cell { background: #1e1e2e; border-radius: 10px; padding: 10px; }
+    .cell canvas { width: 100%; height: auto; border-radius: 6px; display: block; background: #000; }
+    .verdict { font-family: monospace; font-size: 0.8rem; margin-top: 8px; line-height: 1.5; }
+    .ok { color: #6dffb0; } .bad { color: #ff6b6b; } .warn { color: #ffdd57; }
+    #summary { font-family: monospace; font-size: 0.95rem; margin: 10px 0; }
+    a { color: #c08adf; }
+  </style>
+</head>
+<body>
+  <h1>PD — detektor-självtest <span style="color:#8a1a6b">(magenta-först, 2026-06-22)</span></h1>
+  <p class="note">
+    Komponerar varje riktig flagg-PNG på en gul kvadrat OMGIVEN av gula vimplar
+    (just det scenario som fick gamla detektorn att fallera — gul flaggbakgrund
+    smälte ihop med vimplarna). Grön ruta + rätt #ID = igenkänningen fungerar nu.
+    <code>coarse</code> = storleken är magenta-uppskattad (ingen ren gul kvadrat hittades).
+    Detta är ETT OFFLINE-test (syntetisk scen, ej fältljus) — bekräfta slutligt med fältbilder.
+    <a href="test.html">&larr; testingång</a>
+  </p>
+  <div class="controls">
+    <label>Skala (flaggans px-bredd): <input id="scale" type="range" min="40" max="260" value="120"> <span id="scaleVal">120</span></label>
+    <label>Rotation: <input id="rot" type="range" min="0" max="345" step="15" value="0"> <span id="rotVal">0</span>°</label>
+    <label><input id="bunting" type="checkbox" checked> Gula vimplar runt flaggan</label>
+    <button id="run">Kör om</button>
+  </div>
+  <div id="summary">Laddar mallar…</div>
+  <div id="grid"></div>
+
+  <script>
+    var MARKERS = ['Bild_11.png','Bild_12.png','Bild_13.png','Bild_14.png',
+                   'Bild_15.png','Bild_16.png','Bild_17.png','Bild_18.png'];
+    var SCENE_W = 320, SCENE_H = 240;
+    var imgs = {};         /* name -> HTMLImageElement (för komposition) */
+    var grid = document.getElementById('grid');
+    var summary = document.getElementById('summary');
+
+    /* En enkel pseudo-slump (deterministisk) för bakgrundsbrus utan Math.random */
+    var seed = 1234567;
+    function rnd() { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }
+
+    function drawBunting(ctx, cx, cy, flagPx) {
+      /* Gula triangelvimplar tätt runt flaggan (= merge-faran) */
+      ctx.fillStyle = 'rgb(249,225,128)';
+      var s = flagPx * 0.55;
+      var spots = [ [cx - flagPx*0.85, cy], [cx + flagPx*0.85, cy],
+                    [cx - flagPx*0.5, cy - flagPx*0.8], [cx + flagPx*0.5, cy - flagPx*0.8],
+                    [cx, cy - flagPx*0.95] ];
+      spots.forEach(function (p) {
+        ctx.beginPath();
+        ctx.moveTo(p[0] - s/2, p[1] - s/2);
+        ctx.lineTo(p[0] + s/2, p[1] - s/2);
+        ctx.lineTo(p[0], p[1] + s/2);
+        ctx.closePath(); ctx.fill();
+      });
+    }
+
+    function buildScene(canvas, img, flagPx, rotDeg, bunting) {
+      var ctx = canvas.getContext('2d');
+      /* Lövig/himmelsbakgrund (brus) */
+      seed = 987654;
+      for (var y = 0; y < SCENE_H; y += 4) {
+        for (var x = 0; x < SCENE_W; x += 4) {
+          var g = 60 + rnd() * 70;
+          ctx.fillStyle = 'rgb(' + (g*0.6|0) + ',' + (g|0) + ',' + (g*0.7|0) + ')';
+          ctx.fillRect(x, y, 4, 4);
+        }
+      }
+      var cx = SCENE_W/2, cy = SCENE_H/2;
+      if (bunting) drawBunting(ctx, cx, cy, flagPx);
+      /* Flaggan: gul kvadrat + PNG (PNG:n ÄR redan gul bakgrund + magenta piktogram) */
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(rotDeg * Math.PI / 180);
+      ctx.fillStyle = 'rgb(249,225,128)';
+      ctx.fillRect(-flagPx/2, -flagPx/2, flagPx, flagPx);
+      ctx.drawImage(img, -flagPx/2, -flagPx/2, flagPx, flagPx);
+      ctx.restore();
+      return ctx;
+    }
+
+    function drawResult(ctx, dets, expectName) {
+      ctx.lineWidth = 2; ctx.font = '12px monospace';
+      var hit = null;
+      dets.forEach(function (d) {
+        var correct = d.name === expectName;
+        if (correct && !hit) hit = d;
+        ctx.strokeStyle = correct ? '#00ff66' : '#ff5050';
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.beginPath();
+        d.corners.forEach(function (c, i) { i ? ctx.lineTo(c.x, c.y) : ctx.moveTo(c.x, c.y); });
+        ctx.closePath(); ctx.stroke();
+        ctx.fillText(d.name.replace('.png','').replace('Bild_','#') + ' ' + Math.round(d.score*100) + '%',
+                     d.centroid.x - 18, d.centroid.y - 4);
+      });
+      return hit;
+    }
+
+    function runAll() {
+      var flagPx = +document.getElementById('scale').value;
+      var rotDeg = +document.getElementById('rot').value;
+      var bunting = document.getElementById('bunting').checked;
+      document.getElementById('scaleVal').textContent = flagPx;
+      document.getElementById('rotVal').textContent = rotDeg;
+      grid.innerHTML = '';
+      var pass = 0, total = 0;
+
+      MARKERS.forEach(function (name) {
+        total++;
+        var cell = document.createElement('div'); cell.className = 'cell';
+        var cv = document.createElement('canvas'); cv.width = SCENE_W; cv.height = SCENE_H;
+        cell.appendChild(cv);
+        var v = document.createElement('div'); v.className = 'verdict';
+        cell.appendChild(v); grid.appendChild(cell);
+
+        var ctx = buildScene(cv, imgs[name], flagPx, rotDeg, bunting);
+        var img = ctx.getImageData(0, 0, SCENE_W, SCENE_H);
+        var dets = PD.detect(img);
+        var hit = drawResult(ctx, dets, name);
+        if (hit) {
+          pass++;
+          var realPx = flagPx;   /* sann gul-kvadrat-bredd i scenen */
+          var err = Math.round((hit.size - realPx) / realPx * 100);
+          v.innerHTML = '<span class="ok">✓ ' + name.replace('.png','') + '</span> ' +
+            'score ' + Math.round(hit.score*100) + '% · size ' + hit.size.toFixed(0) + 'px ' +
+            '(sann ' + realPx + ', ' + (err>=0?'+':'') + err + '%) ' +
+            (hit.coarse ? '<span class="warn">coarse</span>' : '<span class="ok">exakt</span>');
+        } else {
+          var got = dets.length ? dets.map(function(d){return d.name.replace('.png','').replace('Bild_','#');}).join(',') : 'inget';
+          v.innerHTML = '<span class="bad">✗ ' + name.replace('.png','') + ' MISSAD</span> (fick: ' + got + ')';
+        }
+      });
+      summary.innerHTML = '<b>' + pass + ' / ' + total + '</b> flaggor igenkända' +
+        (pass === total ? ' <span class="ok">— alla OK</span>' : ' <span class="bad">— se misslyckade nedan</span>');
+    }
+
+    /* Ladda PNG:erna för komposition + bygg PD-mallarna */
+    var pending = MARKERS.length;
+    MARKERS.forEach(function (name) {
+      var im = new Image();
+      im.onload = function () { imgs[name] = im; if (--pending === 0) ready(); };
+      im.onerror = function () { summary.innerHTML = '<span class="bad">Kunde ej ladda ' + name + '</span>'; };
+      im.src = 'assets/markers/' + name;
+    });
+    function ready() {
+      PD.load(MARKERS.map(function (n) { return { name: n, url: 'assets/markers/' + n }; }), function (err) {
+        if (err) { summary.innerHTML = '<span class="bad">Mallfel: ' + err + '</span>'; return; }
+        runAll();
+      });
+    }
+    document.getElementById('run').addEventListener('click', runAll);
+  </script>
+</body>
+</html>
