@@ -123,6 +123,11 @@
     var lastDetectMs = 0, lastFlagMs = 0;
     var rigPos = {x:0, z:0}, rigPosT = {x:0, z:0};
     var rigYaw = 0, rigYawT = 0, initialDone = false;
+    /* Låst riktningsestimat (grader CW från norr). Initieras till den generella
+       N/S-riktningen (kalas.bearing), uppdateras ENBART av en bra ≥2-fix (geometrisk
+       heading). Vid 1 flagga används DETTA — aldrig den vinglande kompassen — så att
+       positionen inte studsar runt när vi tappar/återfår enstaka flaggor. */
+    var headingEst = PATH_BEARING;
     var manualPointMode = false, greenBoxUntil = 0;
 
     var V = document.getElementById('cam');
@@ -299,15 +304,18 @@
         if (r.spread < SPREAD_MAX_M) {
           rigPosT.x = r.pos.x; rigPosT.z = r.pos.z;
           rigYawT += angDiff(currentHeading(), r.heading);   /* korrigera headingoffset */
+          headingEst = r.heading;                            /* lås geometrisk riktning för kommande 1-flagg-fixar */
           fixLabel.textContent = 'FIX ◆2+ ('+flags.length+'fl) pos('+r.pos.x.toFixed(1)+','+r.pos.z.toFixed(1)+') spread '+r.spread.toFixed(2)+'m head '+Math.round(r.heading)+'°';
           fixLabel.className = 'fix2';
         }
         /* Löpande ljus-omsampling vid säker fix (bästa flaggan) */
         if (dets[0].score > 0.85) PD.calibrate(PD.sampleRegion(img, dets[0].centroid.x, dets[0].centroid.y, Math.max(10, dets[0].size/2)));
       } else if (flags.length === 1) {
-        var r1 = Resection.solve1(flags[0], focalPx, procW/2, currentHeading());
+        /* Riktning från det LÅSTA estimatet (geometrisk ≥2-fix eller N/S-prior),
+           INTE kompassen → positionen vinglar inte med magnetometern. */
+        var r1 = Resection.solve1(flags[0], focalPx, procW/2, headingEst);
         rigPosT.x = r1.pos.x; rigPosT.z = r1.pos.z;
-        fixLabel.textContent = 'FIX ◇1 ('+dets[0].name.replace('.png','')+') pos('+r1.pos.x.toFixed(1)+','+r1.pos.z.toFixed(1)+') · riktning gyro';
+        fixLabel.textContent = 'FIX ◇1 ('+dets[0].name.replace('.png','')+') pos('+r1.pos.x.toFixed(1)+','+r1.pos.z.toFixed(1)+') · riktning låst '+Math.round(headingEst)+'°';
         fixLabel.className = 'fix1';
       } else {
         if (now - lastFlagMs > PROMPT_MS) {
@@ -359,6 +367,7 @@
         }
         /* Initial heading: anta att användaren tittar mot clownen (kalas.bearing) */
         rigYaw = angDiff(currentHeading(), kalas.bearing); rigYawT = rigYaw; initialDone = true;
+        headingEst = kalas.bearing;   /* generell N/S-riktning tills första ≥2-fix låser den geometriskt */
         requestAnimationFrame(tick);
       }, 400);
     });
