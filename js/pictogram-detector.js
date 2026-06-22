@@ -35,8 +35,10 @@
 var PD = (function () {
 
   var GRID       = 32;     /* mall-/warpupplösning (celler per sida) */
-  var MATCH_MIN  = 0.78;   /* minsta andel matchande celler för träff */
-  var MARGIN_MIN = 0.04;   /* krav på marginal till näst bästa mall */
+  var MATCH_MIN  = 0.72;   /* minsta andel matchande celler för träff (sänkt 0.78→0.72 2026-06-22:
+                              fångar fler marginella kompakta flaggor; rumslig härledning + spridnings-
+                              vakten i gps-f sållar bort fel-ID:n) */
+  var MARGIN_MIN = 0.04;   /* krav på marginal till bästa ANNAN skylt */
   var FRAC_TOL   = 0.22;   /* tillåten avvikelse i magenta-andel mot mall */
 
   var templates = [];      /* {name, rots:[4 x bits], magFrac, magLinFrac} */
@@ -263,6 +265,7 @@ var PD = (function () {
 
       var minDim = w * 0.025;   /* minsta blob-sida i px (avlägsna piktogram små) */
       var results = [];
+      var candidates = [];      /* plausibla flagg-blobbar utan säkert ID (för rumslig härledning) */
 
       for (var ci = 0; ci < magContours.length; ci++) {
         var ct = magContours[ci];
@@ -305,18 +308,28 @@ var PD = (function () {
             secondDiff = Math.max(secondDiff, sBest);
           }
         }
-        if (!(best && best.score >= MATCH_MIN && (best.score - secondDiff) >= MARGIN_MIN)) continue;
-
         var cx = (bb.minX + bb.maxX) / 2, cy = (bb.minY + bb.maxY) / 2;
-        var info = refineSquare(surfBoxes, cx, cy, bw, bh, best.magLinFrac);
-        results.push({
-          name: best.name, corners: info.corners,
-          centroid: { x: cx, y: cy }, size: info.size,
-          score: best.score, rotation: best.rotation, coarse: info.coarse
-        });
+        var info = refineSquare(surfBoxes, cx, cy, bw, bh, best ? best.magLinFrac : 1);
+        if (best && best.score >= MATCH_MIN && (best.score - secondDiff) >= MARGIN_MIN) {
+          results.push({
+            name: best.name, corners: info.corners,
+            centroid: { x: cx, y: cy }, size: info.size,
+            score: best.score, rotation: best.rotation, coarse: info.coarse
+          });
+        } else {
+          /* Plausibel flagg-blob men identiteten kunde ej fastställas (för långt bort/
+             suddig/tvetydig). Surfas som kandidat — gps-f kan härleda dess identitet ur
+             det kända flagg-läget + en säkert identifierad granne (rumslig härledning). */
+          candidates.push({
+            name: null, corners: info.corners,
+            centroid: { x: cx, y: cy }, size: info.size,
+            score: best ? best.score : 0, coarse: info.coarse
+          });
+        }
       }
 
       results.sort(function (a, b) { return b.score - a.score; });
+      results.candidates = candidates;   /* extra-egenskap; gps-f läser den, övriga ignorerar */
       return results;
     },
 

@@ -9,8 +9,8 @@
   <!-- PD behöver CV (cv.js) + AR (aruco.js); ej Posit/SVD i Metod F -->
   <script src="https://unpkg.com/js-aruco2@2.0.0/src/cv.js"></script>
   <script src="https://unpkg.com/js-aruco2@2.0.0/src/aruco.js"></script>
-  <script src="js/pictogram-detector.js?v=20260622b"></script>
-  <script src="js/resection.js?v=20260622b"></script>
+  <script src="js/pictogram-detector.js?v=20260622c"></script>
+  <script src="js/resection.js?v=20260622c"></script>
   <link rel="stylesheet" href="css/ui.css">
   <style>
     html, body { margin: 0; overflow: hidden; background: #000; }
@@ -231,9 +231,17 @@
       var ox = (sw - procW*scale)/2, oy = (sh - procH*scale)/2;
       return { x: px*scale+ox, y: py*scale+oy };
     }
-    function drawBoxes(dets, green) {
+    function drawBoxes(dets, green, cands) {
       octx.clearRect(0,0,overlay.width,overlay.height);
       octx.lineWidth = 3; octx.font = '14px monospace';
+      /* Oidentifierade flagg-blobbar (orange, "?") — ritas underst */
+      (cands || []).forEach(function (c) {
+        octx.strokeStyle = 'rgba(255,160,40,0.9)'; octx.fillStyle = octx.strokeStyle;
+        octx.beginPath();
+        c.corners.forEach(function (p, i) { var s = pxToScreen(p.x, p.y); i?octx.lineTo(s.x,s.y):octx.moveTo(s.x,s.y); });
+        octx.closePath(); octx.stroke();
+        var sc = pxToScreen(c.centroid.x, c.centroid.y); octx.fillText('?', sc.x-4, sc.y);
+      });
       dets.forEach(function (d) {
         octx.strokeStyle = green ? '#00ff66' : 'rgba(255,255,255,0.8)';
         octx.fillStyle = octx.strokeStyle;
@@ -276,11 +284,13 @@
         }
         pctx.drawImage(V, 0, 0, procW, procH);
         var img = pctx.getImageData(0, 0, procW, procH);
-        var dets = PD.detect(img).filter(function (d) { return flagWorld[d.name]; });
+        var raw = PD.detect(img);
+        var dets = raw.filter(function (d) { return flagWorld[d.name]; });
+        var cands = raw.candidates || [];   /* oidentifierade flagg-blobbar (rumslig härledning) */
 
         /* Overlay-rutor: testläge alltid; grön vid manuell utpekning */
         var green = now < greenBoxUntil;
-        drawBoxes(dets, green);
+        drawBoxes(dets, green, cands);
         if (manualPointMode && dets.length) {
           /* Användaren bad om kalibrering → sampla pekad flagga, grön bekräftelse */
           var d0 = dets[0];
@@ -289,12 +299,41 @@
         }
 
         if (dets.length) lastFlagMs = now;
-        applyFix(dets, img, now);
+        applyFix(dets, cands, img, now);
       }
       requestAnimationFrame(tick);
     }
 
-    function applyFix(dets, img, now) {
+    /* Rumslig härledning: en säkert identifierad flagga (anchor) + en oidentifierad
+       flagg-blob (cand). Pröva varje känd flaggidentitet för bloben, kör resektion,
+       och godta paret BARA om (a) spridningen är liten (geometriskt konsistent) OCH
+       (b) en identitet är tydligt bäst — de andra "går omöjligen ihop". Resektionen
+       (bevisad) gör urvalet → inga egna projektions-/teckenantaganden. */
+    var SPREAD_PAIR_MARGIN = 0.6;   /* vinnande identitet måste slå näst bästa med så här mycket (m) */
+    function trySpatialPair(anchorFlag, anchorName, cands) {
+      if (!cands || !cands.length) return null;
+      var trials = [];
+      cands.forEach(function (c) {
+        Object.keys(flagWorld).forEach(function (name) {
+          if (name === anchorName) return;
+          var w = flagWorld[name];
+          var pair = [ anchorFlag,
+            { x:w.x, z:w.z, centroidX:c.centroid.x, pixelWidth:c.size, realWidth:MARKER_SIZE_M } ];
+          var r2 = Resection.solve2plus(pair, focalPx, procW/2);
+          trials.push({ spread:r2.spread, r2:r2, name:name });
+        });
+      });
+      if (!trials.length) return null;
+      trials.sort(function (a, b) { return a.spread - b.spread; });
+      var top = trials[0];
+      if (top.spread >= SPREAD_MAX_M) return null;          /* ingen identitet går geometriskt ihop */
+      var rival = null;
+      for (var i = 1; i < trials.length; i++) { if (trials[i].name !== top.name) { rival = trials[i]; break; } }
+      if (rival && (rival.spread - top.spread) < SPREAD_PAIR_MARGIN) return null;  /* tvetydigt → avstå */
+      return top;
+    }
+
+    function applyFix(dets, cands, img, now) {
       var flags = dets.map(function (d) {
         var w = flagWorld[d.name];
         return { x:w.x, z:w.z, centroidX:d.centroid.x, pixelWidth:d.size, realWidth:MARKER_SIZE_M };
@@ -312,12 +351,23 @@
         /* Löpande ljus-omsampling vid säker fix (bästa flaggan) */
         if (dets[0].score > 0.85) PD.calibrate(PD.sampleRegion(img, dets[0].centroid.x, dets[0].centroid.y, Math.max(10, dets[0].size/2)));
       } else if (flags.length === 1) {
-        /* Riktning från det LÅSTA estimatet (geometrisk ≥2-fix eller N/S-prior),
-           INTE kompassen → positionen vinglar inte med magnetometern. */
-        var r1 = Resection.solve1(flags[0], focalPx, procW/2, headingEst);
-        rigPosT.x = r1.pos.x; rigPosT.z = r1.pos.z;
-        fixLabel.textContent = 'FIX ◇1 ('+dets[0].name.replace('.png','')+') pos('+r1.pos.x.toFixed(1)+','+r1.pos.z.toFixed(1)+') · riktning låst '+Math.round(headingEst)+'°';
-        fixLabel.className = 'fix1';
+        /* Försök uppgradera till en GEOMETRISK 2-fix genom att härleda identiteten
+           på en oidentifierad flagg-blob ur det kända flagg-läget (rumslig härledning). */
+        var paired = trySpatialPair(flags[0], dets[0].name, cands);
+        if (paired) {
+          rigPosT.x = paired.r2.pos.x; rigPosT.z = paired.r2.pos.z;
+          rigYawT += angDiff(currentHeading(), paired.r2.heading);
+          headingEst = paired.r2.heading;
+          fixLabel.textContent = 'FIX ◆2+ (1+1 rumslig '+dets[0].name.replace('.png','').replace('Bild_','#')+'+#'+paired.name.replace('.png','').replace('Bild_','')+') pos('+paired.r2.pos.x.toFixed(1)+','+paired.r2.pos.z.toFixed(1)+') spread '+paired.r2.spread.toFixed(2)+'m head '+Math.round(paired.r2.heading)+'°';
+          fixLabel.className = 'fix2';
+        } else {
+          /* Riktning från det LÅSTA estimatet (geometrisk ≥2-fix eller N-prior),
+             INTE kompassen → positionen vinglar inte med magnetometern. */
+          var r1 = Resection.solve1(flags[0], focalPx, procW/2, headingEst);
+          rigPosT.x = r1.pos.x; rigPosT.z = r1.pos.z;
+          fixLabel.textContent = 'FIX ◇1 ('+dets[0].name.replace('.png','')+') pos('+r1.pos.x.toFixed(1)+','+r1.pos.z.toFixed(1)+') · riktning låst '+Math.round(headingEst)+'°';
+          fixLabel.className = 'fix1';
+        }
       } else {
         if (now - lastFlagMs > PROMPT_MS) {
           fixLabel.textContent = 'COAST – ingen flagga'; fixLabel.className = 'coast';
