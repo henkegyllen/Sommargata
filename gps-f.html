@@ -115,6 +115,7 @@
     var LERP           = 0.18;   /* mjukhet i rig-korrektion */
     var GROUND_ELEV    = 105.00;
     var PATH_BEARING   = 5.7010969;
+    var CLOWN_FACING_DEG = 0;     /* clownen står rakt norrut → clown-foto = användaren vänd i exakt norr */
 
     var anchor = null, kalas = null, placedObjects = [], modelDefaults = {};
     var flagWorld = {};          /* namn → {x,z} */
@@ -127,7 +128,7 @@
        N/S-riktningen (kalas.bearing), uppdateras ENBART av en bra ≥2-fix (geometrisk
        heading). Vid 1 flagga används DETTA — aldrig den vinglande kompassen — så att
        positionen inte studsar runt när vi tappar/återfår enstaka flaggor. */
-    var headingEst = PATH_BEARING;
+    var headingEst = CLOWN_FACING_DEG;
     var manualPointMode = false, greenBoxUntil = 0;
 
     var V = document.getElementById('cam');
@@ -365,9 +366,10 @@
           var s = PD.sampleRegion(pctx.getImageData(0,0,procW,procH), procW/2, procH/2, Math.min(procW,procH)/4);
           if (PD.calibrate(s)) calibrated = true;
         }
-        /* Initial heading: anta att användaren tittar mot clownen (kalas.bearing) */
-        rigYaw = angDiff(currentHeading(), kalas.bearing); rigYawT = rigYaw; initialDone = true;
-        headingEst = kalas.bearing;   /* generell N/S-riktning tills första ≥2-fix låser den geometriskt */
+        /* Clown-foto = användaren står vänd i EXAKT NORR (clownen uppställd rakt
+           norrut från ståpunkten). Sätt heading = norr (0°) som startreferens. */
+        rigYaw = angDiff(currentHeading(), CLOWN_FACING_DEG); rigYawT = rigYaw; initialDone = true;
+        headingEst = CLOWN_FACING_DEG;   /* exakt norr tills första ≥2-fix låser den geometriskt */
         requestAnimationFrame(tick);
       }, 400);
     });
