@@ -88,8 +88,12 @@ var PD = (function () {
     if (refMag) {
       var dM = sq(r - refMag.r) + sq(g - refMag.g) + sq(b - refMag.b);
       var dY = sq(r - refYel.r) + sq(g - refYel.g) + sq(b - refYel.b);
-      if (Math.min(dM, dY) > calibTol2) return 0;
-      return dM < dY ? 1 : 2;
+      /* Inom tolerans → klassa via närmaste referens (ljustålig). UTANFÖR
+         tolerans faller vi igenom till heuristiken i st.f. att kasta pixeln —
+         kalibreringen ska ADDERA känslighet, aldrig BLINDA detektorn. Fältfynd
+         2026-06-22: en sned clown-scan kunde annars få en tydligt magenta flagga
+         att klassas som bakgrund → COAST trots synlig flagga. */
+      if (Math.min(dM, dY) <= calibTol2) return dM < dY ? 1 : 2;
     }
     if (isMagenta(r, g, b)) return 1;
     if (isYellow(r, g, b) || isPale(r, g, b)) return 2;
