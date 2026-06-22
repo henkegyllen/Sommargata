@@ -278,21 +278,30 @@ var PD = (function () {
         }
         var detFrac = magCount / (GRID * GRID);
 
-        /* Matcha mot alla mallar × 4 rotationer (rotera de detekterade bitarna) */
+        /* Matcha mot alla mallar × 4 rotationer (rotera de detekterade bitarna).
+           Marginalen mäts mot bästa ANNAN mall — INTE mot andra rotationer av
+           samma mall: vissa piktogram (t.ex. Bild_18) är nära rotations-
+           symmetriska i magenta-masken → en 180°-rotation av sig själv matchar
+           nästan lika bra. Det är fortfarande KORREKT identitet och får inte
+           sänka marginalen; bara förväxling med en annan skylt ska göra det. */
         var rotBits = [bits];
         for (var r = 1; r < 4; r++) rotBits.push(rotate90(rotBits[r - 1]));
-        var best = null, second = 0;
+        var best = null, secondDiff = 0;
         for (var t = 0; t < templates.length; t++) {
           if (Math.abs(detFrac - templates[t].magFrac) > FRAC_TOL) continue;
+          var sBest = 0, sRot = 0;            /* bästa score över 4 rot. för denna mall */
           for (var rr = 0; rr < 4; rr++) {
             var s = matchScore(rotBits[rr], templates[t].rots[0]);
-            if (!best || s > best.score) {
-              if (best) second = Math.max(second, best.score);
-              best = { name: templates[t].name, score: s, rotation: rr, magLinFrac: templates[t].magLinFrac };
-            } else if (s > second) { second = s; }
+            if (s > sBest) { sBest = s; sRot = rr; }
+          }
+          if (!best || sBest > best.score) {
+            if (best) secondDiff = Math.max(secondDiff, best.score); /* förra bästa = annan mall */
+            best = { name: templates[t].name, score: sBest, rotation: sRot, magLinFrac: templates[t].magLinFrac };
+          } else {
+            secondDiff = Math.max(secondDiff, sBest);
           }
         }
-        if (!(best && best.score >= MATCH_MIN && (best.score - second) >= MARGIN_MIN)) continue;
+        if (!(best && best.score >= MATCH_MIN && (best.score - secondDiff) >= MARGIN_MIN)) continue;
 
         var cx = (bb.minX + bb.maxX) / 2, cy = (bb.minY + bb.maxY) / 2;
         var info = refineSquare(surfBoxes, cx, cy, bw, bh, best.magLinFrac);
