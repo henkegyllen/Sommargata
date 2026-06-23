@@ -369,7 +369,11 @@ var PD = (function () {
       if (!sample || !sample.ok) return false;
       refMag = sample.magenta; refYel = sample.yellow;
       var d2 = sq(refMag.r - refYel.r) + sq(refMag.g - refYel.g) + sq(refMag.b - refYel.b);
-      calibTol2 = sq(0.6) * d2;
+      /* Toleransen = 60 % av avståndet mellan referenserna, MEN takad till ~70 RGB-enheters
+         radie. Utan taket: om clown-scannens magenta och gula referenser hamnar långt isär
+         blir toleransen enorm → ljust lövverk/mark klassas som magenta (fältfynd 2026-06-23,
+         hela trädkronan full av falska blobbar). Taket håller masken ren även vid sned scan. */
+      calibTol2 = Math.min(sq(0.6) * d2, sq(70) * 3);
       return true;
     },
 
