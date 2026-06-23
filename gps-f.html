@@ -9,8 +9,8 @@
   <!-- PD behöver CV (cv.js) + AR (aruco.js); ej Posit/SVD i Metod F -->
   <script src="https://unpkg.com/js-aruco2@2.0.0/src/cv.js"></script>
   <script src="https://unpkg.com/js-aruco2@2.0.0/src/aruco.js"></script>
-  <script src="js/pictogram-detector.js?v=20260623b"></script>
-  <script src="js/resection.js?v=20260623b"></script>
+  <script src="js/pictogram-detector.js?v=20260623c"></script>
+  <script src="js/resection.js?v=20260623c"></script>
   <link rel="stylesheet" href="css/ui.css">
   <style>
     html, body { margin: 0; overflow: hidden; background: #000; }
@@ -64,7 +64,7 @@
     <h2>Sommargatan AR</h2>
     <p class="method-desc">
       Ser kameran ≥2 flaggor samtidigt löses position och riktning geometriskt
-      (decimeter, kompassfritt). Stå vid pyramiden, sikta mot clownen och tryck start.
+      (decimeter, kompassfritt). Stå vid pyramiden, rikta kameran mot flaggorna i norr och tryck start.
     </p>
     <div id="load-status"    class="status-row warn">Laddar placements.csv...</div>
     <div id="compass-status" class="status-row warn hidden">Söker rörelsesensor...</div>
@@ -299,6 +299,11 @@
         }
 
         if (dets.length) lastFlagMs = now;
+        /* Bootstrappa/uppdatera ljus-kalibrering från en SÄKERT detekterad flagga (clown-fritt).
+           Gäller även 1-flagg-fall → masken förbättras så fort EN flagga setts. */
+        if (dets.length && dets[0].score > 0.85 && !manualPointMode) {
+          PD.calibrate(PD.sampleRegion(img, dets[0].centroid.x, dets[0].centroid.y, Math.max(10, dets[0].size/2)));
+        }
         applyFix(dets, cands, img, now);
       }
       requestAnimationFrame(tick);
@@ -352,8 +357,6 @@
           fixLabel.textContent = 'FIX ◆2+ ('+flags.length+'fl) pos('+r.pos.x.toFixed(1)+','+r.pos.z.toFixed(1)+') spread '+r.spread.toFixed(2)+'m head '+Math.round(r.heading)+'°';
           fixLabel.className = 'fix2';
         }
-        /* Löpande ljus-omsampling vid säker fix (bästa flaggan) */
-        if (dets[0].score > 0.85) PD.calibrate(PD.sampleRegion(img, dets[0].centroid.x, dets[0].centroid.y, Math.max(10, dets[0].size/2)));
       } else if (flags.length === 1) {
         /* Försök uppgradera till en GEOMETRISK 2-fix genom att härleda identiteten
            på en oidentifierad flagg-blob ur det kända flagg-läget (rumslig härledning). */
@@ -411,19 +414,21 @@
       startScreen.style.display = 'none';
       uiOverlay.classList.remove('hidden');
 
-      /* Clown-scan: sampla bildmitten (clownen fyller rutan) → färgkalibrering */
+      /* INGEN clown att scanna (stulen 2026-06-23) → INGEN start-kalibrering.
+         Att sampla bildmitten utan clown ger skräp-referenser. Detektorn kör i stället
+         på RGB-heuristiken (samma som klarade self-testet 8/8) tills en flagga upptäcks;
+         då kalibrerar den löpande omsamplingen färgerna från den RIKTIGA flaggan
+         (ljuståligt + scen-representativt). Manuell "Kalibrera ljus ⊕" + tryck på en
+         flagga finns kvar som reserv. */
       setTimeout(function () {
         if (V.videoWidth) {
           procW = V.videoWidth; procH = V.videoHeight; proc.width=procW; proc.height=procH;
           focalPx = (procW/2)/Math.tan(HFOV_DEG/2*Math.PI/180);
-          pctx.drawImage(V, 0, 0, procW, procH);
-          var s = PD.sampleRegion(pctx.getImageData(0,0,procW,procH), procW/2, procH/2, Math.min(procW,procH)/4);
-          if (PD.calibrate(s)) calibrated = true;
         }
-        /* Clown-foto = användaren står vänd i EXAKT NORR (clownen uppställd rakt
-           norrut från ståpunkten). Sätt heading = norr (0°) som startreferens. */
+        /* Startriktning = norr (användaren står vänd mot flaggorna i norr); korrigeras
+           geometriskt vid första ≥2-fix. */
         rigYaw = angDiff(currentHeading(), CLOWN_FACING_DEG); rigYawT = rigYaw; initialDone = true;
-        headingEst = CLOWN_FACING_DEG;   /* exakt norr tills första ≥2-fix låser den geometriskt */
+        headingEst = CLOWN_FACING_DEG;
         requestAnimationFrame(tick);
       }, 400);
     });
