@@ -35,10 +35,12 @@
 var PD = (function () {
 
   var GRID       = 32;     /* mall-/warpupplösning (celler per sida) */
-  var MATCH_MIN  = 0.72;   /* minsta andel matchande celler för träff (sänkt 0.78→0.72 2026-06-22:
-                              fångar fler marginella kompakta flaggor; rumslig härledning + spridnings-
-                              vakten i gps-f sållar bort fel-ID:n) */
-  var MARGIN_MIN = 0.04;   /* krav på marginal till bästa ANNAN skylt */
+  var MATCH_MIN  = 0.78;   /* minsta andel matchande celler för träff. Fältfynd 2026-06-23: 0.72 gav
+                              FEL-ID (magenta-dominant flagga klassad som Bild_11 → 26 m positionsfel).
+                              Åter till 0.78 — en MISSAD flagga är ofarlig (ingen fix), en FEL-ID
+                              teleporterar modellen. Svåra flaggor hanteras av rumslig härledning. */
+  var MARGIN_MIN = 0.07;   /* marginal till bästa ANNAN skylt (höjd 0.04→0.07 mot fel-ID; äkta flaggor
+                              har ≥0.15 i offline-test så detta är säkert) */
   var CAND_SCORE_MIN = 0.66; /* en oidentifierad blob måste LIKNA någon flaggmall så här mycket för att
                                 surfas som kandidat (annars = mark/brus). Under MATCH_MIN men över slump. */
   var FRAC_TOL   = 0.22;   /* tillåten avvikelse i magenta-andel mot mall */

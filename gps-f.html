@@ -9,8 +9,8 @@
   <!-- PD behöver CV (cv.js) + AR (aruco.js); ej Posit/SVD i Metod F -->
   <script src="https://unpkg.com/js-aruco2@2.0.0/src/cv.js"></script>
   <script src="https://unpkg.com/js-aruco2@2.0.0/src/aruco.js"></script>
-  <script src="js/pictogram-detector.js?v=20260623d"></script>
-  <script src="js/resection.js?v=20260623d"></script>
+  <script src="js/pictogram-detector.js?v=20260623e"></script>
+  <script src="js/resection.js?v=20260623e"></script>
   <link rel="stylesheet" href="css/ui.css">
   <style>
     html, body { margin: 0; overflow: hidden; background: #000; }
@@ -320,10 +320,15 @@
     function trySpatialPair(anchorFlag, anchorName, cands) {
       if (!cands || !cands.length) return null;
       var trials = [];
+      var aw = flagWorld[anchorName];
       cands.forEach(function (c) {
         Object.keys(flagWorld).forEach(function (name) {
           if (name === anchorName) return;
           var w = flagWorld[name];
+          /* Hoppa över flaggor på (nästan) SAMMA koordinat som ankaret — t.ex. Bild_11/12
+             är samma fysiska flaggas två sidor. Noll baslinje → degenererad resektion, och
+             man kan ändå inte se båda sidorna samtidigt. */
+          if (aw) { var ddx = w.x - aw.x, ddz = w.z - aw.z; if (ddx*ddx + ddz*ddz < 4) return; }  /* < 2 m */
           var inferred = { x:w.x, z:w.z, centroidX:c.centroid.x, pixelWidth:c.size, realWidth:MARKER_SIZE_M };
           var r2 = Resection.solve2plus([ anchorFlag, inferred ], focalPx, procW/2);
           trials.push({ spread:r2.spread, r2:r2, name:name, flag:inferred });
@@ -340,6 +345,25 @@
          illa betingat/feltolkat. Position härleds sedan ur den LÅSTA riktningen, ej denna. */
       if (!plausibleHeading(top.r2.heading)) return null;
       return top;
+    }
+
+    /* Teleport-skydd: en fix vars position innebär ett orimligt hopp medan vi AKTIVT
+       fixar (färsk föregående fix) är nästan säkert en fel-ID/dålig fix → avvisa. Efter
+       en längre lucka (coast) tillåts hoppet (äkta återinfångning efter att man gått). */
+    var lastFixPos = null, lastFixMs = 0;
+    var MAX_JUMP_M = 10, JUMP_GRACE_MS = 5000;
+    function commitPos(x, z, now) {
+      if (lastFixPos && (now - lastFixMs) < JUMP_GRACE_MS) {
+        var dx = x - lastFixPos.x, dz = z - lastFixPos.z;
+        if (dx*dx + dz*dz > MAX_JUMP_M*MAX_JUMP_M) {
+          fixLabel.textContent = 'FIX avvisad (hopp '+Math.round(Math.sqrt(dx*dx+dz*dz))+'m – trolig fel-ID)';
+          fixLabel.className = 'coast';
+          return false;
+        }
+      }
+      rigPosT.x = x; rigPosT.z = z;
+      lastFixPos = { x:x, z:z }; lastFixMs = now;
+      return true;
     }
 
     /* Pixel-bäring (°) för en flaggs centroid, och största vinkelseparation i ett gäng */
@@ -374,19 +398,22 @@
           if (sep >= SEP_MIN_DEG && plausibleHeading(r.heading)) {
             /* Väl betingad (flaggor tillräckligt isär i bäring) + rimlig (nära N/S)
                → lita på den geometriska riktningen och uppdatera allt. */
-            rigPosT.x = r.pos.x; rigPosT.z = r.pos.z;
-            rigYawT += angDiff(currentHeading(), r.heading);   /* korrigera vyns headingoffset */
-            headingEst = r.heading;                            /* lås geometrisk riktning */
-            fixLabel.textContent = 'FIX ◆2+ ('+flags.length+'fl) pos('+r.pos.x.toFixed(1)+','+r.pos.z.toFixed(1)+') spread '+r.spread.toFixed(2)+'m head '+Math.round(r.heading)+'°';
+            if (commitPos(r.pos.x, r.pos.z, now)) {
+              rigYawT += angDiff(currentHeading(), r.heading);   /* korrigera vyns headingoffset */
+              headingEst = r.heading;                            /* lås geometrisk riktning */
+              fixLabel.textContent = 'FIX ◆2+ ('+flags.length+'fl) pos('+r.pos.x.toFixed(1)+','+r.pos.z.toFixed(1)+') spread '+r.spread.toFixed(2)+'m head '+Math.round(r.heading)+'°';
+              fixLabel.className = 'fix2';
+            }
           } else {
             /* Illa betingad (flaggor nära i bäring) el. orimlig heading → riktningen
                är ej observerbar. Behåll LÅST riktning (rör ej rigYaw/headingEst),
                härled bara position ur den. Förhindrar att scenen roteras fel. */
             var pf = posFromFlagsFixedHeading(flags, headingEst);
-            rigPosT.x = pf.x; rigPosT.z = pf.z;
-            fixLabel.textContent = 'FIX ◆2+ ('+flags.length+'fl, riktn. låst '+Math.round(headingEst)+'°) pos('+pf.x.toFixed(1)+','+pf.z.toFixed(1)+')';
+            if (commitPos(pf.x, pf.z, now)) {
+              fixLabel.textContent = 'FIX ◆2+ ('+flags.length+'fl, riktn. låst '+Math.round(headingEst)+'°) pos('+pf.x.toFixed(1)+','+pf.z.toFixed(1)+')';
+              fixLabel.className = 'fix2';
+            }
           }
-          fixLabel.className = 'fix2';
         }
       } else if (flags.length === 1) {
         /* Härled identiteten på en oidentifierad granne (rumslig härledning) → position
@@ -394,16 +421,18 @@
         var paired = trySpatialPair(flags[0], dets[0].name, cands);
         if (paired) {
           var pp = posFromFlagsFixedHeading([ flags[0], paired.flag ], headingEst);
-          rigPosT.x = pp.x; rigPosT.z = pp.z;
-          fixLabel.textContent = 'FIX ◆2+ (1+1 rumslig '+dets[0].name.replace('.png','').replace('Bild_','#')+'+#'+paired.name.replace('.png','').replace('Bild_','')+', riktn. låst '+Math.round(headingEst)+'°) pos('+pp.x.toFixed(1)+','+pp.z.toFixed(1)+')';
-          fixLabel.className = 'fix2';
+          if (commitPos(pp.x, pp.z, now)) {
+            fixLabel.textContent = 'FIX ◆2+ (1+1 rumslig '+dets[0].name.replace('.png','').replace('Bild_','#')+'+#'+paired.name.replace('.png','').replace('Bild_','')+', riktn. låst '+Math.round(headingEst)+'°) pos('+pp.x.toFixed(1)+','+pp.z.toFixed(1)+')';
+            fixLabel.className = 'fix2';
+          }
         } else {
           /* Riktning från det LÅSTA estimatet (senaste väl betingade ≥2-fix el. N-prior),
              INTE kompassen → positionen vinglar inte med magnetometern. */
           var r1 = Resection.solve1(flags[0], focalPx, procW/2, headingEst);
-          rigPosT.x = r1.pos.x; rigPosT.z = r1.pos.z;
-          fixLabel.textContent = 'FIX ◇1 ('+dets[0].name.replace('.png','')+') pos('+r1.pos.x.toFixed(1)+','+r1.pos.z.toFixed(1)+') · riktning låst '+Math.round(headingEst)+'°';
-          fixLabel.className = 'fix1';
+          if (commitPos(r1.pos.x, r1.pos.z, now)) {
+            fixLabel.textContent = 'FIX ◇1 ('+dets[0].name.replace('.png','')+') pos('+r1.pos.x.toFixed(1)+','+r1.pos.z.toFixed(1)+') · riktning låst '+Math.round(headingEst)+'°';
+            fixLabel.className = 'fix1';
+          }
         }
       } else {
         if (now - lastFlagMs > PROMPT_MS) {
