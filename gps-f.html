@@ -5,6 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Sommargatan – Metod F (multi-markör-resektion)</title>
+  <!-- Påtvingad uppdatering: jämför mot version-f.json (hämtas no-store). Matchar ej →
+       ladda om med ?v=ny så Chrome/Safari kringgår cachad HTML. VID SKARP ÄNDRING: höj
+       BÅDE APP_VERSION HÄR, version-f.json OCH ?v= på de två lokala script-taggarna nedan. -->
+  <script>
+    var APP_VERSION = '20260623e';
+    (function () {
+      try {
+        fetch('version-f.json?t=' + Date.now(), { cache: 'no-store' })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (d && d.version && d.version !== APP_VERSION &&
+                location.search.indexOf('v=' + d.version) === -1) {
+              location.replace(location.pathname + '?v=' + d.version);
+            }
+          }).catch(function () { /* offline: kör vidare med cachad version */ });
+      } catch (e) { /* ignorera */ }
+    })();
+  </script>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <!-- PD behöver CV (cv.js) + AR (aruco.js); ej Posit/SVD i Metod F -->
   <script src="https://unpkg.com/js-aruco2@2.0.0/src/cv.js"></script>
@@ -122,6 +140,7 @@
     var anchor = null, kalas = null, placedObjects = [], modelDefaults = {};
     var flagWorld = {};          /* namn → {x,z} */
     var csvReady = false, arActive = false, calibrated = false;
+    var modelTotal = 0, modelLoaded = 0, modelError = 0;   /* GLB-laddningsräknare (254 modeller, 16 MB) */
     var procW = 640, procH = 480, focalPx = 0;
     var lastDetectMs = 0, lastFlagMs = 0;
     var rigPos = {x:0, z:0}, rigPosT = {x:0, z:0};
@@ -186,11 +205,14 @@
     function posStr(x,y,z) { return x.toFixed(3)+' '+y.toFixed(3)+' '+z.toFixed(3); }
 
     function buildScene() {
+      modelTotal = placedObjects.length;
       placedObjects.forEach(function (o, i) {
         var off = o.offset, id = 'f-asset-'+i;
         var ai = document.createElement('a-asset-item'); ai.setAttribute('id', id); ai.setAttribute('src', 'assets/models/'+o.namn); assets.appendChild(ai);
         var m = document.createElement('a-gltf-model'); m.setAttribute('src', '#'+id);
         m.setAttribute('position', posStr(off.x, off.y, off.z)); m.setAttribute('scale', getScale(o));
+        m.addEventListener('model-loaded', function () { modelLoaded++; });
+        m.addEventListener('model-error',  function () { modelError++; });
         sceneRoot.appendChild(m);
       });
     }
@@ -219,7 +241,7 @@
       /* Ladda flaggmallar för identifiering (samma som C/D) */
       PD.load(Object.keys(flagWorld).map(function (n) { return { name:n, url:'assets/markers/'+n }; }), function (err) {
         if (err) { showError('Mallbild: '+err); return; }
-        loadStatus.textContent = placedObjects.length+' objekt, '+Object.keys(flagWorld).length+' flaggor ✓';
+        loadStatus.textContent = placedObjects.length+' objekt, '+Object.keys(flagWorld).length+' flaggor ✓ · v'+APP_VERSION;
         loadStatus.className = 'status-row ready';
         compassStatus.classList.remove('hidden');
         csvReady = true; startBtn.classList.add('enabled');
@@ -275,7 +297,8 @@
       if (arActive) {
         var g = lastGPS ? ('GPS ('+lastGPS.x.toFixed(1)+','+lastGPS.z.toFixed(1)+')m ±'+Math.round(lastGPS.acc)) : 'GPS –';
         var k = compassHeading!=null ? (' · kompass '+Math.round(compassHeading)+'°') : '';
-        geoLabel.textContent = g + k;
+        var md = ' · mdl '+modelLoaded+'/'+modelTotal + (modelError ? (' ('+modelError+' fel)') : '');
+        geoLabel.textContent = g + k + md;
       }
       var now = Date.now();
       if (arActive && now - lastDetectMs > 100 && V.readyState >= V.HAVE_ENOUGH_DATA && PD.isReady()) {
