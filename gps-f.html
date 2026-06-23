@@ -9,7 +9,7 @@
        ladda om med ?v=ny så Chrome/Safari kringgår cachad HTML. VID SKARP ÄNDRING: höj
        BÅDE APP_VERSION HÄR, version-f.json OCH ?v= på de två lokala script-taggarna nedan. -->
   <script>
-    var APP_VERSION = '20260623e';
+    var APP_VERSION = '20260623f';
     (function () {
       try {
         fetch('version-f.json?t=' + Date.now(), { cache: 'no-store' })
@@ -27,8 +27,8 @@
   <!-- PD behöver CV (cv.js) + AR (aruco.js); ej Posit/SVD i Metod F -->
   <script src="https://unpkg.com/js-aruco2@2.0.0/src/cv.js"></script>
   <script src="https://unpkg.com/js-aruco2@2.0.0/src/aruco.js"></script>
-  <script src="js/pictogram-detector.js?v=20260623e"></script>
-  <script src="js/resection.js?v=20260623e"></script>
+  <script src="js/pictogram-detector.js?v=20260623f"></script>
+  <script src="js/resection.js?v=20260623f"></script>
   <link rel="stylesheet" href="css/ui.css">
   <style>
     html, body { margin: 0; overflow: hidden; background: #000; }
@@ -82,7 +82,8 @@
     <h2>Sommargatan AR</h2>
     <p class="method-desc">
       Ser kameran ≥2 flaggor samtidigt löses position och riktning geometriskt
-      (decimeter, kompassfritt). Stå vid pyramiden, rikta kameran mot flaggorna i norr och tryck start.
+      (decimeter, kompassfritt). <b>VIKTIGT:</b> stå på clownens plats och vänd dig <b>rakt norrut</b>
+      innan du trycker start — startriktningen antas vara norr.
     </p>
     <div id="load-status"    class="status-row warn">Laddar placements.csv...</div>
     <div id="compass-status" class="status-row warn hidden">Söker rörelsesensor...</div>
@@ -507,8 +508,9 @@
           procW = V.videoWidth; procH = V.videoHeight; proc.width=procW; proc.height=procH;
           focalPx = (procW/2)/Math.tan(HFOV_DEG/2*Math.PI/180);
         }
-        /* Startriktning = norr (användaren står vänd mot flaggorna i norr); korrigeras
-           geometriskt vid första ≥2-fix. */
+        /* Startriktning TVINGAS till norr: användaren står på clownens plats vänd rakt
+           norrut (clownen stulen, men platsen känd → siktdisciplinen återställd). Låses
+           sedan; förfinas geometriskt vid en väl betingad ≥2-fix. */
         rigYaw = angDiff(currentHeading(), CLOWN_FACING_DEG); rigYawT = rigYaw; initialDone = true;
         headingEst = CLOWN_FACING_DEG;
         requestAnimationFrame(tick);
