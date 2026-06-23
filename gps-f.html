@@ -9,8 +9,8 @@
   <!-- PD behöver CV (cv.js) + AR (aruco.js); ej Posit/SVD i Metod F -->
   <script src="https://unpkg.com/js-aruco2@2.0.0/src/cv.js"></script>
   <script src="https://unpkg.com/js-aruco2@2.0.0/src/aruco.js"></script>
-  <script src="js/pictogram-detector.js?v=20260623c"></script>
-  <script src="js/resection.js?v=20260623c"></script>
+  <script src="js/pictogram-detector.js?v=20260623d"></script>
+  <script src="js/resection.js?v=20260623d"></script>
   <link rel="stylesheet" href="css/ui.css">
   <style>
     html, body { margin: 0; overflow: hidden; background: #000; }
@@ -115,7 +115,9 @@
     var LERP           = 0.18;   /* mjukhet i rig-korrektion */
     var GROUND_ELEV    = 105.00;
     var PATH_BEARING   = 5.7010969;
-    var CLOWN_FACING_DEG = 0;     /* clownen står rakt norrut → clown-foto = användaren vänd i exakt norr */
+    var CLOWN_FACING_DEG = 0;     /* startriktning = norr (gatan/vimpellinan löper N–S, användaren vänd norrut) */
+    var HEADING_TOL    = 45;      /* heading måste ligga inom så här många ° från N(0) el. S(180) för att tros (gatan är N–S) */
+    var SEP_MIN_DEG    = 10;      /* min vinkelseparation mellan två flaggor för att deras geometriska heading ska vara observerbar */
 
     var anchor = null, kalas = null, placedObjects = [], modelDefaults = {};
     var flagWorld = {};          /* namn → {x,z} */
@@ -322,10 +324,9 @@
         Object.keys(flagWorld).forEach(function (name) {
           if (name === anchorName) return;
           var w = flagWorld[name];
-          var pair = [ anchorFlag,
-            { x:w.x, z:w.z, centroidX:c.centroid.x, pixelWidth:c.size, realWidth:MARKER_SIZE_M } ];
-          var r2 = Resection.solve2plus(pair, focalPx, procW/2);
-          trials.push({ spread:r2.spread, r2:r2, name:name });
+          var inferred = { x:w.x, z:w.z, centroidX:c.centroid.x, pixelWidth:c.size, realWidth:MARKER_SIZE_M };
+          var r2 = Resection.solve2plus([ anchorFlag, inferred ], focalPx, procW/2);
+          trials.push({ spread:r2.spread, r2:r2, name:name, flag:inferred });
         });
       });
       if (!trials.length) return null;
@@ -335,11 +336,29 @@
       var rival = null;
       for (var i = 1; i < trials.length; i++) { if (trials[i].name !== top.name) { rival = trials[i]; break; } }
       if (rival && (rival.spread - top.spread) < SPREAD_PAIR_MARGIN) return null;  /* tvetydigt → avstå */
-      /* Sundhetskontroll: ett RUMSLIGT par (inte två säkra flaggor) får inte vrida riktningen
-         orimligt mot det redan låsta estimatet — annars kan en feltolkad blob korrumpera headingEst.
-         Riktiga ≥2-fixar (båda identifierade) är auktoritativa och passerar inte här. */
-      if (Math.abs(angDiff(headingEst, top.r2.heading)) > 35) return null;
+      /* Riktningen som paret implicerar måste vara rimlig (nära N/S) — annars är paret
+         illa betingat/feltolkat. Position härleds sedan ur den LÅSTA riktningen, ej denna. */
+      if (!plausibleHeading(top.r2.heading)) return null;
       return top;
+    }
+
+    /* Pixel-bäring (°) för en flaggs centroid, och största vinkelseparation i ett gäng */
+    function pixBearingDeg(cxp) { return Math.atan2(cxp - procW/2, focalPx) * 180/Math.PI; }
+    function maxSeparationDeg(fl) {
+      var m = 0, i, j;
+      for (i = 0; i < fl.length; i++) for (j = i+1; j < fl.length; j++) {
+        var d = Math.abs(pixBearingDeg(fl[i].centroidX) - pixBearingDeg(fl[j].centroidX));
+        if (d > m) m = d;
+      }
+      return m;
+    }
+    /* Är headingen rimlig givet att gatan är N–S? (nära 0 eller 180) */
+    function plausibleHeading(h) { return Math.abs(angDiff(h, 0)) <= HEADING_TOL || Math.abs(angDiff(h, 180)) <= HEADING_TOL; }
+    /* Position ur flaggor med en FAST (låst) riktning — medel av solve1 per flagga (bevisad math). */
+    function posFromFlagsFixedHeading(fl, hd) {
+      var sx = 0, sz = 0, i;
+      for (i = 0; i < fl.length; i++) { var p = Resection.solve1(fl[i], focalPx, procW/2, hd).pos; sx += p.x; sz += p.z; }
+      return { x: sx/fl.length, z: sz/fl.length };
     }
 
     function applyFix(dets, cands, img, now) {
@@ -351,24 +370,35 @@
       if (flags.length >= 2) {
         var r = Resection.solve2plus(flags, focalPx, procW/2);
         if (r.spread < SPREAD_MAX_M) {
-          rigPosT.x = r.pos.x; rigPosT.z = r.pos.z;
-          rigYawT += angDiff(currentHeading(), r.heading);   /* korrigera headingoffset */
-          headingEst = r.heading;                            /* lås geometrisk riktning för kommande 1-flagg-fixar */
-          fixLabel.textContent = 'FIX ◆2+ ('+flags.length+'fl) pos('+r.pos.x.toFixed(1)+','+r.pos.z.toFixed(1)+') spread '+r.spread.toFixed(2)+'m head '+Math.round(r.heading)+'°';
+          var sep = maxSeparationDeg(flags);
+          if (sep >= SEP_MIN_DEG && plausibleHeading(r.heading)) {
+            /* Väl betingad (flaggor tillräckligt isär i bäring) + rimlig (nära N/S)
+               → lita på den geometriska riktningen och uppdatera allt. */
+            rigPosT.x = r.pos.x; rigPosT.z = r.pos.z;
+            rigYawT += angDiff(currentHeading(), r.heading);   /* korrigera vyns headingoffset */
+            headingEst = r.heading;                            /* lås geometrisk riktning */
+            fixLabel.textContent = 'FIX ◆2+ ('+flags.length+'fl) pos('+r.pos.x.toFixed(1)+','+r.pos.z.toFixed(1)+') spread '+r.spread.toFixed(2)+'m head '+Math.round(r.heading)+'°';
+          } else {
+            /* Illa betingad (flaggor nära i bäring) el. orimlig heading → riktningen
+               är ej observerbar. Behåll LÅST riktning (rör ej rigYaw/headingEst),
+               härled bara position ur den. Förhindrar att scenen roteras fel. */
+            var pf = posFromFlagsFixedHeading(flags, headingEst);
+            rigPosT.x = pf.x; rigPosT.z = pf.z;
+            fixLabel.textContent = 'FIX ◆2+ ('+flags.length+'fl, riktn. låst '+Math.round(headingEst)+'°) pos('+pf.x.toFixed(1)+','+pf.z.toFixed(1)+')';
+          }
           fixLabel.className = 'fix2';
         }
       } else if (flags.length === 1) {
-        /* Försök uppgradera till en GEOMETRISK 2-fix genom att härleda identiteten
-           på en oidentifierad flagg-blob ur det kända flagg-läget (rumslig härledning). */
+        /* Härled identiteten på en oidentifierad granne (rumslig härledning) → position
+           ur LÅST riktning (rumsliga par ändrar ALDRIG heading). */
         var paired = trySpatialPair(flags[0], dets[0].name, cands);
         if (paired) {
-          rigPosT.x = paired.r2.pos.x; rigPosT.z = paired.r2.pos.z;
-          rigYawT += angDiff(currentHeading(), paired.r2.heading);
-          headingEst = paired.r2.heading;
-          fixLabel.textContent = 'FIX ◆2+ (1+1 rumslig '+dets[0].name.replace('.png','').replace('Bild_','#')+'+#'+paired.name.replace('.png','').replace('Bild_','')+') pos('+paired.r2.pos.x.toFixed(1)+','+paired.r2.pos.z.toFixed(1)+') spread '+paired.r2.spread.toFixed(2)+'m head '+Math.round(paired.r2.heading)+'°';
+          var pp = posFromFlagsFixedHeading([ flags[0], paired.flag ], headingEst);
+          rigPosT.x = pp.x; rigPosT.z = pp.z;
+          fixLabel.textContent = 'FIX ◆2+ (1+1 rumslig '+dets[0].name.replace('.png','').replace('Bild_','#')+'+#'+paired.name.replace('.png','').replace('Bild_','')+', riktn. låst '+Math.round(headingEst)+'°) pos('+pp.x.toFixed(1)+','+pp.z.toFixed(1)+')';
           fixLabel.className = 'fix2';
         } else {
-          /* Riktning från det LÅSTA estimatet (geometrisk ≥2-fix eller N-prior),
+          /* Riktning från det LÅSTA estimatet (senaste väl betingade ≥2-fix el. N-prior),
              INTE kompassen → positionen vinglar inte med magnetometern. */
           var r1 = Resection.solve1(flags[0], focalPx, procW/2, headingEst);
           rigPosT.x = r1.pos.x; rigPosT.z = r1.pos.z;
