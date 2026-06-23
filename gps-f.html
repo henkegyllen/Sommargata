@@ -9,8 +9,8 @@
   <!-- PD behöver CV (cv.js) + AR (aruco.js); ej Posit/SVD i Metod F -->
   <script src="https://unpkg.com/js-aruco2@2.0.0/src/cv.js"></script>
   <script src="https://unpkg.com/js-aruco2@2.0.0/src/aruco.js"></script>
-  <script src="js/pictogram-detector.js?v=20260622c"></script>
-  <script src="js/resection.js?v=20260622c"></script>
+  <script src="js/pictogram-detector.js?v=20260623a"></script>
+  <script src="js/resection.js?v=20260623a"></script>
   <link rel="stylesheet" href="css/ui.css">
   <style>
     html, body { margin: 0; overflow: hidden; background: #000; }
@@ -330,6 +330,10 @@
       var rival = null;
       for (var i = 1; i < trials.length; i++) { if (trials[i].name !== top.name) { rival = trials[i]; break; } }
       if (rival && (rival.spread - top.spread) < SPREAD_PAIR_MARGIN) return null;  /* tvetydigt → avstå */
+      /* Sundhetskontroll: ett RUMSLIGT par (inte två säkra flaggor) får inte vrida riktningen
+         orimligt mot det redan låsta estimatet — annars kan en feltolkad blob korrumpera headingEst.
+         Riktiga ≥2-fixar (båda identifierade) är auktoritativa och passerar inte här. */
+      if (Math.abs(angDiff(headingEst, top.r2.heading)) > 35) return null;
       return top;
     }
 

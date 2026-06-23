@@ -39,6 +39,8 @@ var PD = (function () {
                               fångar fler marginella kompakta flaggor; rumslig härledning + spridnings-
                               vakten i gps-f sållar bort fel-ID:n) */
   var MARGIN_MIN = 0.04;   /* krav på marginal till bästa ANNAN skylt */
+  var CAND_SCORE_MIN = 0.66; /* en oidentifierad blob måste LIKNA någon flaggmall så här mycket för att
+                                surfas som kandidat (annars = mark/brus). Under MATCH_MIN men över slump. */
   var FRAC_TOL   = 0.22;   /* tillåten avvikelse i magenta-andel mot mall */
 
   var templates = [];      /* {name, rots:[4 x bits], magFrac, magLinFrac} */
@@ -316,19 +318,22 @@ var PD = (function () {
             centroid: { x: cx, y: cy }, size: info.size,
             score: best.score, rotation: best.rotation, coarse: info.coarse
           });
-        } else {
-          /* Plausibel flagg-blob men identiteten kunde ej fastställas (för långt bort/
-             suddig/tvetydig). Surfas som kandidat — gps-f kan härleda dess identitet ur
-             det kända flagg-läget + en säkert identifierad granne (rumslig härledning). */
+        } else if (best && best.score >= CAND_SCORE_MIN && Math.max(bw, bh) >= w * 0.04) {
+          /* Plausibel flagg-blob som LIKNAR någon mall men ej kunde ID:as säkert (för långt
+             bort/suddig/tvetydig). Surfas som kandidat — gps-f härleder identiteten ur det
+             kända flagg-läget + en säkert identifierad granne. Score-/storlekskraven stoppar
+             mark-/brus-blobbar (fältfynd 2026-06-23: marken översållades annars av kandidater). */
           candidates.push({
             name: null, corners: info.corners,
             centroid: { x: cx, y: cy }, size: info.size,
-            score: best ? best.score : 0, coarse: info.coarse
+            score: best.score, coarse: info.coarse
           });
         }
       }
 
       results.sort(function (a, b) { return b.score - a.score; });
+      candidates.sort(function (a, b) { return b.score - a.score; });
+      if (candidates.length > 5) candidates.length = 5;   /* bästa fåtal → bundet sök + mindre clutter */
       results.candidates = candidates;   /* extra-egenskap; gps-f läser den, övriga ignorerar */
       return results;
     },
