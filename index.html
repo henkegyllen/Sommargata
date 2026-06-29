@@ -17,7 +17,7 @@
     URL-parameter (egen URL → Safari måste hämta färsk HTML).
   -->
   <script>
-    var APP_VERSION = '2026-06-29b';
+    var APP_VERSION = '2026-06-29c';
     (function () {
       try {
         fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -89,12 +89,6 @@
     }
     #start-kalas-btn.enabled { opacity: 1; pointer-events: all; }
     #splash-status { font-size: 0.85rem; color: #9999bb; min-height: 1.2em; }
-    /* Dold testingång: samma färg som bakgrunden — osynlig för allmänheten,
-       men fullt klickbar för oss som vet att den ligger längst ner */
-    #test-link {
-      color: #1a1a2e; text-decoration: none; font-size: 0.75rem;
-      margin-top: 8px; padding: 10px 30px;   /* generös träffyta */
-    }
     /* Versionsstämpel: nästan osynlig för allmänheten, läsbar på nära håll
        för oss vid test — visar vilken kodversion som faktiskt laddats */
     #version-stamp { color: #26263a; font-size: 0.62rem; font-family: monospace; }
@@ -156,7 +150,6 @@
     </div>
     <button id="start-kalas-btn">&#127880; Starta AR</button>
     <div id="splash-status"></div>
-    <a id="test-link" href="test.html">testingång</a>
     <div id="version-stamp"></div>
   </div>
 
