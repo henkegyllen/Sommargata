@@ -214,7 +214,7 @@
      *   • När rätt värde hittats: sätt DEFAULT_HEADING_OFFSET nedan och deploya.
      *   • +värde vrider kalaset medurs, −värde moturs (sett ovanifrån).
      */
-    var DEFAULT_HEADING_OFFSET = 0;
+    var DEFAULT_HEADING_OFFSET = 7;   /* speglar HEADING_OFFSET i index.html (fältmätt 2026-06-29) */
     var HEADING_OFFSET = (function () {
       var m = location.search.match(/[?&]ko=(-?\d+(?:\.\d+)?)/);
       return m ? parseFloat(m[1]) : DEFAULT_HEADING_OFFSET;

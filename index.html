@@ -17,7 +17,7 @@
     URL-parameter (egen URL → Safari måste hämta färsk HTML).
   -->
   <script>
-    var APP_VERSION = '2026-06-29a';
+    var APP_VERSION = '2026-06-29b';
     (function () {
       try {
         fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -200,8 +200,9 @@
      * mot de målade prickarna på marken.
      *   Fältmäts på kal.html (kalibreringsspåret i testingången). När rätt
      *   värde hittats: skriv in det här och deploya. +medurs, −moturs.
+     *   Fältmätt 2026-06-29 (kal.html, gyro): +7° rättar snedvridningen.
      */
-    var HEADING_OFFSET = 0;
+    var HEADING_OFFSET = 7;
 
     /* iOS (iPhone/iPad) saknar WebXR-positionsspårning → annan instruktion än
        Android. iPadOS 13+ maskerar sig som Mac, fånga via touch-stöd. */
