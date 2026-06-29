@@ -13,7 +13,7 @@
   <!-- Kalibreringsspåret: INGEN versionshandskakning – annars skulle en
        omladdning kunna kasta bort ?ko=/?cal= mitt under fälttuning. -->
   <script>
-    var APP_VERSION = '2026-06-29b-kal';
+    var APP_VERSION = '2026-06-29c-kal';
   </script>
 
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
@@ -83,8 +83,11 @@
     #version-stamp { color: #26263a; font-size: 0.62rem; font-family: monospace; }
 
     /* ── AR-läge ── */
+    /* Helskärm (inset:0) så att kalibreringsraden kan positioneras ABSOLUTE
+       mot overlay-boxen och stanna kvar i WebXR:s komposit­erade dom-overlay-
+       lager. position:fixed lyfts ut bakom den immersiva vyn → osynlig. */
     #ui-overlay {
-      position: fixed; top: 0; left: 0; right: 0;
+      position: fixed; inset: 0;
       display: flex; justify-content: space-between; align-items: flex-start;
       padding: 12px 16px; pointer-events: none; z-index: 1000;
     }
@@ -110,9 +113,9 @@
     }
     #ios-hint small { color: #ffd93d; font-size: 0.8rem; }
 
-    /* Dold kalibreringsrad (?cal=1) */
+    /* Kalibreringsrad — ABSOLUTE mot helskärms-#ui-overlay (ej fixed, se ovan) */
     #cal-bar {
-      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+      position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%);
       z-index: 1002; display: flex; align-items: center; gap: 8px;
       background: rgba(0,0,0,0.72); padding: 8px 12px; border-radius: 14px;
       font-family: sans-serif;
