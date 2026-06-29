@@ -13,7 +13,7 @@
   <!-- Kalibreringsspåret: INGEN versionshandskakning – annars skulle en
        omladdning kunna kasta bort ?ko=/?cal= mitt under fälttuning. -->
   <script>
-    var APP_VERSION = '2026-06-29d-kal';
+    var APP_VERSION = '2026-06-29e-kal';
   </script>
 
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
@@ -55,9 +55,15 @@
     }
     #splash .instruction { font-size: 1.05rem; color: #ffd93d; margin: 0; font-weight: bold; }
     #cam-box {
-      width: min(62vw, 272px); aspect-ratio: 3 / 4;   /* ~20 % smalare: tvingar rakt framför clownen */
+      width: min(54vw, 236px); aspect-ratio: 3 / 4;   /* mindre ruta → noggrannare inpassning rakt framför clownen */
       border: 4px dashed #ff6b9d; border-radius: 20px;
       overflow: hidden; position: relative; background: #000;
+    }
+    /* Vertikal mittlinje som scanhjälp: centrera clownen i sidled mot den */
+    #cam-box::after {
+      content: ""; position: absolute; top: 0; bottom: 0; left: 50%;
+      width: 2px; margin-left: -1px; z-index: 2; pointer-events: none;
+      background: rgba(255,107,157,0.75);
     }
     #cam-hint {
       position: absolute; inset: 0; display: flex; align-items: center;
