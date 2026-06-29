@@ -17,7 +17,7 @@
     URL-parameter (egen URL → Safari måste hämta färsk HTML).
   -->
   <script>
-    var APP_VERSION = '2026-06-29d';
+    var APP_VERSION = '2026-06-29e';
     (function () {
       try {
         fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -281,7 +281,7 @@
           var lat=parseFloat(c[1]),lon=parseFloat(c[2]);
           if (isNaN(lat)||isNaN(lon)) return;
           objectRows.push({ namn:nam, lat:lat, lon:lon, elev:val(c[3]),
-            synligInom:val(c[4]), csvScale:parseScale(c[5]),
+            synligInom:val(c[4]), csvScale:parseScale(c[5]), csvRot:parseRot(c[6]),
             bearing:val(c[4]),
             modelLoaded:false, arActive:false, currentlyVisible:false });
         }
@@ -292,6 +292,10 @@
     function parseScale(s) {
       if (!s||s.trim()==='') return null; s=s.trim();
       return s.split(/\s+/).length===1 ? s+' '+s+' '+s : s;
+    }
+    function parseRot(s) {
+      if (!s||s.trim()==='') return null; s=s.trim();
+      return s.split(/\s+/).length===1 ? '0 '+s+' 0' : s;   /* ett tal = runt Y; annars "x y z" */
     }
 
     function surveyOffset(anc, lat, lon, elev) {
@@ -342,6 +346,7 @@
         model.setAttribute('src', '#' + assetId);
         model.setAttribute('position', posStr(off.x, off.y, off.z));
         model.setAttribute('scale', getScale(obj));
+        if (obj.csvRot) model.setAttribute('rotation', obj.csvRot);
         model.setAttribute('visible', 'false');
         model.addEventListener('model-loaded', function () {
           obj.modelLoaded = true;

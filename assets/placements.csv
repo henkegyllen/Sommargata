@@ -1,15 +1,16 @@
 # Sommargatan Survey AR – objektplacering
 #
-# Objekt/ankar: namn, lat, lon, elev (valfri), synlig_inom (m, valfri), scale (valfri)
+# Objekt/ankar: namn, lat, lon, elev (valfri), synlig_inom (m, valfri), scale (valfri), rotation (valfri)
 # Barriär:      SPARR_namn, lat_start, lon_start, lat_slut, lon_slut
 #
 # ANKAR         – ArUco-markörens inmätta position, origo i AR-scenen (obligatorisk)
 # <fil>.glb     – 3D-objekt ur assets/models/
 #   synlig_inom – max avstånd för synlighet i meter (tom = alltid synlig)
 #   scale       – skalfaktor: "4" = uniform, "4 2 4" = icke-uniform (tom = 1)
+#   rotation    – grader: "90" = runt Y (vridning), "90 0 0" = x y z (tom = ingen). Endast index.html/kal.html.
 # SPARR_<namn>  – Siktbarriär. Objekt döljs om siktlinjen observer→objekt skär linjen.
 #
-namn,lat,lon,elev,synlig_inom,scale
+namn,lat,lon,elev,synlig_inom,scale,rotation
 ANKAR,56.8790818,14.8015807,105.00
 # KALAS-raden (publika ingangen index.html): stapunkt + riktning mot clownen.
 #   Geometri (clownen MONTERAD 2026-06-05):
@@ -114,7 +115,7 @@ Ballong_46.glb,56.8793585,14.8016442,108.00,30,1
 Ballong_47.glb,56.8793754,14.801611,108.00,30,1
 #Tarta_1.glb,56.8790597,14.8015435,105.00,30,1
 #Tarta_2.glb,56.8790567,14.8016105,105.00,30,1
-##Tarta_3.glb,56.8790818,14.8015807,105.00,30,1
+Tarta_3.glb,56.8790818,14.8015807,105.00,30,0.5,90
 #Tarta_4.glb,56.8791059,14.8015504,105.00,30,1
 #Tarta_5.glb,56.8791028,14.8016176,105.00,30,1
 Prick_1.glb,56.8788028,14.8015606,105.00,30,1
