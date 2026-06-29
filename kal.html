@@ -13,7 +13,7 @@
   <!-- Kalibreringsspåret: INGEN versionshandskakning – annars skulle en
        omladdning kunna kasta bort ?ko=/?cal= mitt under fälttuning. -->
   <script>
-    var APP_VERSION = '2026-06-29c-kal';
+    var APP_VERSION = '2026-06-29d-kal';
   </script>
 
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
@@ -489,12 +489,13 @@
       }
     }
 
-    /* WebXR-stöd? (Android Chrome + ARCore → stabil VIO-spårning) */
-    if (navigator.xr) {
-      navigator.xr.isSessionSupported('immersive-ar').then(function (ok) {
-        xrSupported = ok;
-      });
-    }
+    /* KALIBRERINGSSPÅRET: tvinga GYRO-läge (ej WebXR) på ALLA telefoner.
+       Skäl: i WebXR komponeras dom-overlayn inte på alla Android-enheter →
+       kalibreringsknapparna hamnar bakom AR-vyn. I gyro-läget är kameran en
+       vanlig <video> och hela DOM:en ritas ovanpå → knapparna syns alltid.
+       Vinkeln (ko) tunas stillastående → positionsspårning behövs ej, och
+       ko-värdet är identiskt oavsett spårningsväg → går rakt in i index.html. */
+    xrSupported = false;
 
     /* Väntar på första deviceorientation-händelsen (iOS: kommer först
        efter tillståndsklicket) så att gyro-yaw är färskt vid kalibrering */
