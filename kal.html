@@ -8,29 +8,12 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>Kalasvärlden – Sommargatan Växjö</title>
+  <title>Kalibrering – Sommargatan (testspår)</title>
 
-  <!--
-    Versionshandskakning – tvingar iOS Safari att ladda senaste sidan.
-    APP_VERSION måste matcha version.json. Vid varje skarp ändring: höj BÅDA.
-    Hämtar version.json utan cache; är sidan äldre laddas den om med ny
-    URL-parameter (egen URL → Safari måste hämta färsk HTML).
-  -->
+  <!-- Kalibreringsspåret: INGEN versionshandskakning – annars skulle en
+       omladdning kunna kasta bort ?ko=/?cal= mitt under fälttuning. -->
   <script>
-    var APP_VERSION = '2026-06-29a';
-    (function () {
-      try {
-        fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
-          .then(function (r) { return r.json(); })
-          .then(function (d) {
-            if (d && d.version && d.version !== APP_VERSION &&
-                location.search.indexOf('v=' + d.version) === -1) {
-              location.replace(location.pathname + '?v=' + d.version);
-            }
-          })
-          .catch(function () { /* offline: kör vidare med cachad version */ });
-      } catch (e) { /* ignorera */ }
-    })();
+    var APP_VERSION = '2026-06-29a-kal';
   </script>
 
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
@@ -126,6 +109,22 @@
       pointer-events: none;
     }
     #ios-hint small { color: #ffd93d; font-size: 0.8rem; }
+
+    /* Dold kalibreringsrad (?cal=1) */
+    #cal-bar {
+      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+      z-index: 1002; display: flex; align-items: center; gap: 8px;
+      background: rgba(0,0,0,0.72); padding: 8px 12px; border-radius: 14px;
+      font-family: sans-serif;
+    }
+    #cal-bar button {
+      pointer-events: all; padding: 10px 12px; border: none; border-radius: 10px;
+      background: #c44dff; color: #fff; font-size: 0.95rem; font-weight: bold; cursor: pointer;
+    }
+    #cal-readout {
+      color: #ffd93d; font-family: monospace; font-size: 1.05rem; font-weight: bold;
+      min-width: 84px; text-align: center;
+    }
     .hidden { display: none !important; }
   </style>
 </head>
@@ -148,7 +147,7 @@
   </a-scene>
 
   <div id="splash">
-    <h1>Välkommen till kalasvärlden</h1>
+    <h1>Kalibreringsläge 🛠️</h1>
     <p class="instruction">Passa in <u>hela</u> clownen i rutan</p>
     <div id="cam-box">
       <video id="cam" class="boxed" autoplay playsinline muted></video>
@@ -163,12 +162,21 @@
   <div id="error-overlay" class="hidden">
     <h2>Hoppsan!</h2>
     <p id="error-message"></p>
-    <a href="index.html">&#8634; Försök igen</a>
+    <a href="kal.html">&#8634; Försök igen</a>
   </div>
 
   <div id="ui-overlay" class="hidden">
     <button id="exit-ar-btn">&#10005; Avsluta</button>
     <button id="recal-btn">Passa in clownen igen &#8634;</button>
+  </div>
+
+  <!-- Dold kalibreringsrad (endast ?cal=1): vrid kalaset live och läs av ko -->
+  <div id="cal-bar" class="hidden">
+    <button data-d="-5">&#8810; 5&deg;</button>
+    <button data-d="-1">&#8249; 1&deg;</button>
+    <span id="cal-readout">ko 0&deg;</span>
+    <button data-d="1">1&deg; &#8250;</button>
+    <button data-d="5">5&deg; &#8811;</button>
   </div>
 
   <!-- iOS-banner: utan positionsspårning fungerar bara "stå still + vrid dig" -->
@@ -196,17 +204,27 @@
 
     /*
      * HEADING_OFFSET — extra rotation (grader, medurs sett uppifrån) som läggs
-     * ovanpå clown-kalibreringen och rättar att hela kalaset hamnar snedvridet
-     * mot de målade prickarna på marken.
-     *   Fältmäts på kal.html (kalibreringsspåret i testingången). När rätt
-     *   värde hittats: skriv in det här och deploya. +medurs, −moturs.
+     * ovanpå clown-kalibreringen. Rättar att hela kalaset hamnar snedvridet i
+     * förhållande till de målade prickarna på marken.
+     *   • Fälttuna live utan ny deploy:  …/index.html?ko=12   (prova värden)
+     *   • När rätt värde hittats: sätt DEFAULT_HEADING_OFFSET nedan och deploya.
+     *   • +värde vrider kalaset medurs, −värde moturs (sett ovanifrån).
      */
-    var HEADING_OFFSET = 0;
+    var DEFAULT_HEADING_OFFSET = 0;
+    var HEADING_OFFSET = (function () {
+      var m = location.search.match(/[?&]ko=(-?\d+(?:\.\d+)?)/);
+      return m ? parseFloat(m[1]) : DEFAULT_HEADING_OFFSET;
+    })();
 
     /* iOS (iPhone/iPad) saknar WebXR-positionsspårning → annan instruktion än
        Android. iPadOS 13+ maskerar sig som Mac, fånga via touch-stöd. */
     var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
                 (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    /* Kalibreringsspåret: nudge-knappar i AR-vyn för att fältmäta ko.
+       ALLTID synliga här (eget testspår). Startvärde via ?ko=. */
+    var calMode      = true;
+    var calBaseRotY  = 0;   /* scen-rotation FÖRE HEADING_OFFSET (sätts vid kalibrering) */
 
     var anchor        = null;
     var kalas         = null;        /* {lat, lon, bearing} — ståpunkt + clownriktning */
@@ -238,7 +256,7 @@
     /* Visa laddad kodversion (så vi vid test vet att rätt sida körs) */
     (function () {
       var vs = document.getElementById('version-stamp');
-      if (vs) vs.textContent = 'v' + APP_VERSION;
+      if (vs) vs.textContent = 'v' + APP_VERSION + (HEADING_OFFSET ? ' ko' + HEADING_OFFSET : '');
     })();
 
     /* Välkomsttext anpassad efter telefon: Android kan gå runt i kalaset,
@@ -498,7 +516,8 @@
          */
         xrMode = true;
         splashStatus.textContent = 'Håll kvar siktet på clownen...';
-        sceneRoot.setAttribute('rotation', '0 ' + (kalas.bearing + HEADING_OFFSET).toFixed(2) + ' 0');
+        calBaseRotY = kalas.bearing;
+        applyHeading();
         sceneRoot.setAttribute('position', '0 0 0');
 
         /* Släpp kameran till ARCore */
@@ -532,9 +551,9 @@
       /* Kalibrering: användaren är vänd mot clownen (centrerad i rutan).
          Siktlinjeformeln med α = 0: rotY = clownbäring + kamerans yaw. */
       var psi  = camEl.object3D.rotation.y * 180 / Math.PI;
-      var rotY = kalas.bearing + psi + HEADING_OFFSET;
-      sceneRoot.setAttribute('rotation', '0 ' + rotY.toFixed(2) + ' 0');
-      console.log('[Kalas] Kalibrering (embedded): bearing', kalas.bearing, 'psi', psi.toFixed(1), 'offset', HEADING_OFFSET, 'rotY', rotY.toFixed(1));
+      calBaseRotY = kalas.bearing + psi;
+      applyHeading();
+      console.log('[Kalas] Kalibrering (embedded): bearing', kalas.bearing, 'psi', psi.toFixed(1), 'offset', HEADING_OFFSET, 'rotY', (calBaseRotY + HEADING_OFFSET).toFixed(1));
 
       /* Växla till AR-läge: video fullskärm, splash bort */
       document.body.appendChild(cam);          /* flytta ut ur cam-box */
@@ -542,6 +561,7 @@
       cam.classList.add('fullscreen');
       splash.classList.add('hidden');
       uiOverlay.classList.remove('hidden');
+      showCalBar();
 
       /* iOS saknar positionsspårning (ingen WebXR) → modellerna kan inte
          hållas världsfasta när man GÅR, bara när man vrider sig. Styr
@@ -560,10 +580,11 @@
       if (!xrMode) return;
       splash.classList.add('hidden');
       uiOverlay.classList.remove('hidden');
+      showCalBar();
       arActive = true;
       placedObjects.forEach(function (obj) { obj.arActive = true; });
       visTimer = setInterval(updateVisibility, VISIBILITY_HZ);
-      console.log('[Kalas] WebXR-session startad, rotY =', kalas.bearing.toFixed(1));
+      console.log('[Kalas] WebXR-session startad, rotY =', (calBaseRotY + HEADING_OFFSET).toFixed(1));
     });
     scene.addEventListener('exit-vr', function () {
       if (!xrMode) return;
@@ -584,6 +605,7 @@
       cam.classList.add('boxed');
       camBox.insertBefore(cam, camBox.firstChild);
       uiOverlay.classList.add('hidden');
+      document.getElementById('cal-bar').classList.add('hidden');
       splash.classList.remove('hidden');
       startBtn.classList.add('enabled');
       splashStatus.textContent = '';
@@ -593,6 +615,30 @@
       clearInterval(visTimer);
       if (cam.srcObject) cam.srcObject.getTracks().forEach(function (t) { t.stop(); });
       window.location.reload();
+    });
+
+    /* ── Vinkelkorrigering ──
+       Sätter scenens rotation = kalibreringsbas + HEADING_OFFSET och
+       uppdaterar avläsningen i kalibreringsraden. */
+    function applyHeading() {
+      sceneRoot.setAttribute('rotation', '0 ' + (calBaseRotY + HEADING_OFFSET).toFixed(2) + ' 0');
+      var ro = document.getElementById('cal-readout');
+      if (ro) ro.textContent = 'ko ' + (HEADING_OFFSET >= 0 ? '+' : '') + HEADING_OFFSET + '°';
+    }
+
+    /* Dold kalibreringsrad: visas bara med ?cal=1. Knapparna nudgar kalaset
+       live så rätt ko kan läsas av i fält. */
+    function showCalBar() {
+      if (!calMode) return;
+      var bar = document.getElementById('cal-bar');
+      bar.classList.remove('hidden');
+      applyHeading();
+    }
+    document.getElementById('cal-bar').addEventListener('click', function (e) {
+      var btn = e.target.closest('button');
+      if (!btn) return;
+      HEADING_OFFSET = Math.round((HEADING_OFFSET + parseFloat(btn.getAttribute('data-d'))) * 10) / 10;
+      applyHeading();
     });
 
     function showError(msg) {
