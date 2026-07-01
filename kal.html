@@ -13,7 +13,7 @@
   <!-- Kalibreringsspåret: INGEN versionshandskakning – annars skulle en
        omladdning kunna kasta bort ?ko=/?cal= mitt under fälttuning. -->
   <script>
-    var APP_VERSION = '2026-06-29f-kal';
+    var APP_VERSION = '2026-06-29g-kal';
   </script>
 
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
@@ -352,6 +352,27 @@
 
     function posStr(x, y, z) { return x.toFixed(3)+' '+y.toFixed(3)+' '+z.toFixed(3); }
 
+    /* Spelar upp INBÄDDADE glTF-animationsklipp om modellen har några
+       (A-Frame core gör det inte självt). Använder THREE som följer med
+       A-Frame — ingen extern CDN. No-op för statiska modeller. Släpp bara in
+       en animerad GLB i assets/models/ + referera i CSV, så spelas den. */
+    AFRAME.registerComponent('clip-player', {
+      init: function () {
+        var self = this;
+        function setup() {
+          var gc = self.el.components['gltf-model'];
+          var model = gc && gc.model;
+          if (!model || !model.animations || !model.animations.length) return;
+          self.mixer = new THREE.AnimationMixer(model);
+          model.animations.forEach(function (clip) { self.mixer.clipAction(clip).reset().play(); });
+        }
+        var gc0 = this.el.components['gltf-model'];
+        if (gc0 && gc0.model) setup();
+        else this.el.addEventListener('model-loaded', setup);
+      },
+      tick: function (t, dt) { if (this.mixer && dt) this.mixer.update(dt / 1000); }
+    });
+
     /* ── Bygg scen ── */
     function buildScene() {
       placedObjects.forEach(function (obj, idx) {
@@ -375,6 +396,21 @@
         model.setAttribute('position', posStr(off.x, off.y, off.z));
         model.setAttribute('scale', getScale(obj));
         if (obj.csvRot) model.setAttribute('rotation', obj.csvRot);
+        model.setAttribute('clip-player', '');   /* spelar ev. inbäddade klipp */
+
+        /* Ballonger: procedurell gunga (rotation.z) + sväv (position.y),
+           desynkade per index så de inte rör sig i takt. */
+        if (/^Ballong/i.test(obj.namn)) {
+          var bob = 0.12 + (idx % 4) * 0.03;      /* 0.12–0.21 m */
+          var dur = 1700 + (idx % 6) * 260;       /* 1700–3000 ms */
+          var del = (idx * 173) % 1400;
+          model.setAttribute('animation__bob', {
+            property: 'object3D.position.y', from: off.y, to: off.y + bob,
+            dir: 'alternate', loop: true, dur: dur, delay: del, easing: 'easeInOutSine' });
+          model.setAttribute('animation__sway', {
+            property: 'object3D.rotation.z', from: -0.08, to: 0.08,
+            dir: 'alternate', loop: true, dur: dur + 400, delay: del, easing: 'easeInOutSine' });
+        }
         model.setAttribute('visible', 'false');
         model.addEventListener('model-loaded', function () {
           obj.modelLoaded = true;
