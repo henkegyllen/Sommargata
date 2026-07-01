@@ -2,7 +2,7 @@
 
 Webbbaserad AR-upplevelse. Invånare scannar en QR-kod, öppnar appen i webbläsaren och ser 3D-innehåll förankrat till fysiska markörer på plats.
 
-**Live-URL:** https://henkegyllen.github.io/Sommargata/
+**Live-URL:** https:// henkegyllen.github.io/Sommargata/
 
 ---
 
@@ -103,7 +103,7 @@ Format: `"X Y Z"` relativt markörens centrum.
 ### Steg 1: Generera markörsfil (.patt)
 
 Öppna i webbläsaren:
-https://ar-js-org.github.io/AR.js/three.js/examples/marker-training/examples/multi-markers/examples/marker-training.html
+https:// ar-js-org.github.io/AR.js/three.js/examples/marker-training/examples/multi-markers/examples/marker-training.html
 
 1. Ladda upp en kvadratisk PNG med tydligt svartvitt mönster (tjock svart kant, unikt mönster inuti)
 2. Ladda ned `.patt`-filen → lägg den i `assets/markers/`
@@ -114,7 +114,7 @@ https://ar-js-org.github.io/AR.js/three.js/examples/marker-training/examples/mul
 De fem stationerna använder förnärvarande **ArUco/barcode-markörer** (värde 0–4). Inga .patt-filer behövs.
 
 Ladda ned och skriv ut dessa markörer:
-- Marker 0: https://raw.githack.com/AR-js-org/AR.js/master/data/images/HIRO.jpg *(byt ut mot ArUco-bilder)*
+- Marker 0: https:// raw.githack.com/AR-js-org/AR.js/master/data/images/HIRO.jpg *(byt ut mot ArUco-bilder)*
 
 Enklare: sök "ArUco marker generator" och generera markörer med ID 0, 1, 2, 3, 4 och `matrixCodeType: 3x3`.
 
@@ -125,15 +125,15 @@ Rekommenderad utskriftsstorlek: **12–15 cm × 12–15 cm** för god detekterin
 
 ## GitHub Pages – aktivering (engångsinställning)
 
-1. Gå till: https://github.com/henkegyllen/Sommargata/settings/pages
+1. Gå till: https:// github.com/henkegyllen/Sommargata/settings/pages
 2. Under "Source": välj `main`-grenen, mapp `/` (root)
-3. Spara → appen är live på https://henkegyllen.github.io/Sommargata/
+3. Spara → appen är live på https:// henkegyllen.github.io/Sommargata/
 
 ---
 
 ## Testa utan utskrift
 
-1. Öppna https://henkegyllen.github.io/Sommargata/ar.html på mobilen
+1. Öppna https:// henkegyllen.github.io/Sommargata/ar.html på mobilen
 2. Visa en markörsbild på en datorskärm
 3. Peka mobilkameran mot datorskärmen – fungerar för testning utan utskrift
 
@@ -141,6 +141,6 @@ Rekommenderad utskriftsstorlek: **12–15 cm × 12–15 cm** för god detekterin
 
 ## Teknikstack
 
-- [A-Frame 1.5.0](https://aframe.io) – 3D/WebXR-ramverk
-- [AR.js 3.4.5](https://ar-js-org.github.io/AR.js-Docs/) – Markörsbaserad AR i webbläsaren
+- [A-Frame 1.5.0](https:// aframe.io) – 3D/WebXR-ramverk
+- [AR.js 3.4.5](https:// ar-js-org.github.io/AR.js-Docs/) – Markörsbaserad AR i webbläsaren
 - Statisk hosting på GitHub Pages (gratis, HTTPS ingår)
