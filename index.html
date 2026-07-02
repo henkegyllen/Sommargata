@@ -19,7 +19,7 @@
     URL-parameter (egen URL → Safari måste hämta färsk HTML).
   -->
   <script>
-    var APP_VERSION = '2026-06-29i';
+    var APP_VERSION = '2026-06-29j';
     (function () {
       try {
         fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -360,6 +360,7 @@
         bottom: { default: -4 },     /* slut-höjd (helt under mark → osynlig) */
         ceil:   { default: 5 },      /* takplan (m över mark); dold ovanför detta */
         dur:    { default: 5250 },   /* fall-tid ms */
+        pause:  { default: 5000 },   /* paus mellan fall ms (parkerad osynlig) */
         delay:  { default: 0 }
       },
       init: function () {
@@ -384,12 +385,24 @@
         if (this.el.getObject3D('mesh')) applyClip();
         else this.el.addEventListener('model-loaded', applyClip);
 
-        this.el.setAttribute('animation__fall', {
-          property: 'object3D.position.y',
-          from: this.data.top, to: this.data.bottom,
-          dur: this.data.dur, delay: this.data.delay,
-          loop: true, dir: 'normal', easing: 'easeInQuad'   /* accelererar som gravitation */
-        });
+        /* Cykel: FALL (dur) → PAUS (pause). delay ger fasförskjutning per instans.
+           Under pausen parkeras modellen högt över taket → helt osynlig (klippt),
+           oavsett modellstorlek. Loop-övergångar sker utanför bandet = ingen "pop". */
+        this.clock = this.data.delay;
+        this.cycle = this.data.dur + this.data.pause;
+        this.parkY = this.data.ceil + 25;
+      },
+      tick: function (time, dt) {
+        if (!dt) return;
+        this.clock += dt;
+        var t = this.clock % this.cycle, y;
+        if (t < this.data.dur) {
+          var p = t / this.data.dur; p = p * p;   /* easeInQuad → accelererar som gravitation */
+          y = this.data.top + (this.data.bottom - this.data.top) * p;
+        } else {
+          y = this.parkY;                          /* paus: parkerad osynlig över taket */
+        }
+        this.el.object3D.position.y = y;
       }
     });
 
@@ -438,7 +451,8 @@
           model.setAttribute('confetti-fall', {
             top: off.y, bottom: -4, ceil: 5,   /* tak = 110 m (mark 105 → y=5) */
             dur: Math.round((3800 + (idx % 3) * 700) * 1.25),   /* 25 % långsammare */
-            delay: (idx * 1300) % 3400 });
+            pause: 5000 + (idx % 3) * 1800,    /* paus 5–8,6 s, varierad → osynkat regn */
+            delay: (idx * 1700) % 4000 });
         }
         model.setAttribute('visible', 'false');
         model.addEventListener('model-loaded', function () {
