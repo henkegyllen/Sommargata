@@ -2,8 +2,8 @@
 
 Webbaserad AR-upplevelse för sommargågatan "Sommargatan 2026". Besökaren scannar en QR-kod på en skylt, öppnar sidan i mobilens webbläsare och ser festligt 3D-innehåll (prickar, ballonger, paket, polkagrisar, tårta) utlagt längs gatan – ingen app att ladda ned.
 
-**Live-URL:** https:// henkegyllen.github.io/Sommargata/
-*(URL:er i denna fil är avsiktligt "brutna" med ett mellanslag efter `https://` så att de inte tolkas som klickbara länkar.)*
+**Live-URL:** https://henkegyllen.github.io/Sommargata/
+*(URL:er i denna fil är nedanför här avsiktligt "brutna" med ett mellanslag efter `https://` så att de inte tolkas som klickbara länkar.)*
 
 ---
 
