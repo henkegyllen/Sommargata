@@ -19,7 +19,7 @@
     URL-parameter (egen URL → Safari måste hämta färsk HTML).
   -->
   <script>
-    var APP_VERSION = '2026-06-29k';
+    var APP_VERSION = '2026-06-29l';
     (function () {
       try {
         fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -451,9 +451,9 @@
         if (/^Konfetti/i.test(obj.namn)) {
           model.setAttribute('confetti-fall', {
             top: off.y, bottom: -12, ceil: 5,   /* tak = 110 m (mark 105 → y=5); botten djupt */
-            /* 1.25 = 25 % långsammare; 1.342 = √1.8 kompenserar djupare botten så
-               den SYNLIGA hastigheten (topp→mark) blir oförändrad (konstant accel). */
-            dur: Math.round((3800 + (idx % 3) * 700) * 1.25 * 1.342),
+            /* 1.5 = långsammare fall (var 1.25); 1.342 = √1.8 kompenserar djupare
+               botten så den synliga hastigheten styrs bara av 1.5-faktorn (konstant accel). */
+            dur: Math.round((3800 + (idx % 3) * 700) * 1.5 * 1.342),
             pause: 5000 + (idx % 3) * 1800,    /* paus 5–8,6 s, varierad → osynkat regn */
             delay: (idx * 1700) % 4000 });
         }
