@@ -19,7 +19,7 @@
     URL-parameter (egen URL → Safari måste hämta färsk HTML).
   -->
   <script>
-    var APP_VERSION = '2026-06-29h';
+    var APP_VERSION = '2026-06-29i';
     (function () {
       try {
         fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -353,17 +353,21 @@
        allt under marken per fragment (även mitt i modellen medan den sjunker).
        Fungerar trots scenens Y-rotation (rotation runt Y ändrar ej y-värdet).
        Faller top→bottom, loopar → kontinuerligt konfettifall. */
-    var GROUND_CLIP = null;
+    var GROUND_CLIP = null, CEIL_CLIP = null;
     AFRAME.registerComponent('confetti-fall', {
       schema: {
-        top:    { default: 4 },      /* start-höjd (m över mark) */
+        top:    { default: 6 },      /* start-höjd (m över mark) = ovanför taket → dold */
         bottom: { default: -4 },     /* slut-höjd (helt under mark → osynlig) */
-        dur:    { default: 4200 },   /* fall-tid ms */
+        ceil:   { default: 5 },      /* takplan (m över mark); dold ovanför detta */
+        dur:    { default: 5250 },   /* fall-tid ms */
         delay:  { default: 0 }
       },
       init: function () {
         var self = this;
-        if (!GROUND_CLIP) GROUND_CLIP = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); /* behåll y≥0 */
+        /* Synligt band mellan mark (y=0) och tak (y=ceil): två klippplan.
+           THREE behåller fragment bara innanför BÅDA (clipIntersection=false). */
+        if (!GROUND_CLIP) GROUND_CLIP = new THREE.Plane(new THREE.Vector3(0,  1, 0), 0);            /* behåll y≥0 */
+        if (!CEIL_CLIP)   CEIL_CLIP   = new THREE.Plane(new THREE.Vector3(0, -1, 0), this.data.ceil); /* behåll y≤ceil */
 
         function applyClip() {
           var r = self.el.sceneEl.renderer;
@@ -373,7 +377,7 @@
           mesh.traverse(function (o) {
             if (!o.material) return;
             (Array.isArray(o.material) ? o.material : [o.material]).forEach(function (m) {
-              m.clippingPlanes = [GROUND_CLIP]; m.needsUpdate = true;
+              m.clippingPlanes = [GROUND_CLIP, CEIL_CLIP]; m.needsUpdate = true;
             });
           });
         }
@@ -432,8 +436,9 @@
            klipps bort vid marknivå; desynkat per instans. */
         if (/^Konfetti/i.test(obj.namn)) {
           model.setAttribute('confetti-fall', {
-            top: off.y, bottom: -4,
-            dur: 3800 + (idx % 3) * 700, delay: (idx * 1300) % 3400 });
+            top: off.y, bottom: -4, ceil: 5,   /* tak = 110 m (mark 105 → y=5) */
+            dur: Math.round((3800 + (idx % 3) * 700) * 1.25),   /* 25 % långsammare */
+            delay: (idx * 1300) % 3400 });
         }
         model.setAttribute('visible', 'false');
         model.addEventListener('model-loaded', function () {
