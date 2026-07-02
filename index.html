@@ -19,7 +19,7 @@
     URL-parameter (egen URL → Safari måste hämta färsk HTML).
   -->
   <script>
-    var APP_VERSION = '2026-06-29j';
+    var APP_VERSION = '2026-06-29k';
     (function () {
       try {
         fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -357,7 +357,8 @@
     AFRAME.registerComponent('confetti-fall', {
       schema: {
         top:    { default: 6 },      /* start-höjd (m över mark) = ovanför taket → dold */
-        bottom: { default: -4 },     /* slut-höjd (helt under mark → osynlig) */
+        bottom: { default: -12 },    /* slut-höjd: djupt under mark så HELA modellen hinner
+                                        klippas bort (topp sist) innan den parkeras – inget snap */
         ceil:   { default: 5 },      /* takplan (m över mark); dold ovanför detta */
         dur:    { default: 5250 },   /* fall-tid ms */
         pause:  { default: 5000 },   /* paus mellan fall ms (parkerad osynlig) */
@@ -449,8 +450,10 @@
            klipps bort vid marknivå; desynkat per instans. */
         if (/^Konfetti/i.test(obj.namn)) {
           model.setAttribute('confetti-fall', {
-            top: off.y, bottom: -4, ceil: 5,   /* tak = 110 m (mark 105 → y=5) */
-            dur: Math.round((3800 + (idx % 3) * 700) * 1.25),   /* 25 % långsammare */
+            top: off.y, bottom: -12, ceil: 5,   /* tak = 110 m (mark 105 → y=5); botten djupt */
+            /* 1.25 = 25 % långsammare; 1.342 = √1.8 kompenserar djupare botten så
+               den SYNLIGA hastigheten (topp→mark) blir oförändrad (konstant accel). */
+            dur: Math.round((3800 + (idx % 3) * 700) * 1.25 * 1.342),
             pause: 5000 + (idx % 3) * 1800,    /* paus 5–8,6 s, varierad → osynkat regn */
             delay: (idx * 1700) % 4000 });
         }
